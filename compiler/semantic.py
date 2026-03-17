@@ -288,7 +288,7 @@ class SemanticAnalyzer:
     def _validate_assignment(self, tokens, line_number: int) -> AnalysisResult | None:
         """
         Validates the pattern:  <identifier> = <value> ;
-        Warns if the variable was never declared.
+        Warns if the variable was never declared or if the semicolon is missing.
         """
         name = tokens[0].value
 
@@ -296,6 +296,13 @@ class SemanticAnalyzer:
         if not self.symbol_table.exists(name):
             return self._warning(
                 f'"{name}" is used but was never declared.',
+                line_number
+            )
+
+        # the last token must be a semicolon
+        if tokens[-1].type != Types.SEMICOLON:
+            return self._warning(
+                f'Missing ";" at the end of statement.',
                 line_number
             )
 
