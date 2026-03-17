@@ -8,8 +8,9 @@
 import tkinter as tk
 from tkinter import filedialog, Menu, Frame, Text
 
-from compiler.lexer    import Lexer
-from compiler.semantic import SemanticAnalyzer
+from compiler.lexer     import Lexer
+from compiler.parser    import Parser
+from compiler.semantic  import SemanticAnalyzer
 
 
 # =============================================================================
@@ -38,47 +39,109 @@ def save_file():
 
 
 # =============================================================================
-# Compiler actions — these call into compiler/ and show results
+# Compiler actions
 # =============================================================================
+
+def run_compile():
+    """
+    Runs all three phases in order and shows only errors and warnings.
+    This is what a real compiler shows the user — silence means success.
+    """
+    source   = editor.get("1.0", "end-1c")
+    lines    = []
+
+    # phase 1 — parser checks structure
+    parser          = Parser()
+    parse_results   = parser.parse(source)
+    structure_errors = [r for r in parse_results if not r.is_valid]
+
+    # phase 2 — semantic checks meaning
+    analyzer        = SemanticAnalyzer()
+    semantic_results = analyzer.analyze(source)
+
+    # combine both into one report
+    # if the parser already flagged a line for structure, skip semantic
+    # results for the same line to avoid reporting the same issue twice
+    structure_list = [(r.line, "error",    r.message) for r in structure_errors]
+    flagged_lines  = {r[0] for r in structure_list}
+    semantic_list  = [(r.line, r.severity, r.message) for r in semantic_results
+                      if r.line not in flagged_lines]
+
+    all_results = sorted(structure_list + semantic_list, key=lambda r: r[0])
+
+    if not all_results:
+        _show_output(["Compilation successful. No errors found."])
+        return
+
+    for line_number, severity, message in all_results:
+        lines.append(f"main.ts:{line_number} - {severity}:  {message}")
+
+    errors   = [r for r in all_results if r[1] == "error"]
+    warnings = [r for r in all_results if r[1] == "warning"]
+    lines.append("")
+    lines.append(f"Found {len(errors)} error(s), {len(warnings)} warning(s).")
+    _show_output(lines)
+
 
 def run_lexer():
     """
-    Tokenizes the editor content and shows every token in the output panel.
-    Useful for seeing exactly what the Lexer is producing.
+    Shows every token the Lexer produces from the source code.
+    Useful for inspecting what the compiler sees before any validation.
     """
     source = editor.get("1.0", "end-1c")
-    lexer  = Lexer(source)
-    tokens = lexer.tokenize_all()
+    tokens = Lexer(source).tokenize_all()
 
-    lines = ["── Lexer output ──────────────────────────", ""]
+    lines = ["── Lexer output ──────────────────────────────────────", ""]
     for token in tokens:
         if token.type.name == "END":
             continue
-        label  = token.type.label or token.type.name
+        label  = token.type.label
         prefix = f"< {token.type.name} > < {label} >"
-        lines.append(f"{prefix:45}  {token.value!r}   (line {token.line})")
+        lines.append(f"{prefix:50}  {token.value!r}   (line {token.line})")
 
     _show_output(lines)
 
+
+def run_parser():
+    """
+    Shows the structural analysis of every line — valid and invalid.
+    Useful for seeing whether each line matches a known pattern.
+    """
+    source  = editor.get("1.0", "end-1c")
+    parser  = Parser()
+    results = parser.parse(source)
+
+    lines = ["── Parser output ─────────────────────────────────────", ""]
+    for r in results:
+        status = "ok   " if r.is_valid else "error"
+        lines.append(f"line {r.line:<4}  [{status}]  {r.pattern:<24}  {r.message}")
+
+    _show_output(lines)
+
+
 def run_semantic():
     """
-    Runs the semantic analyzer on the editor content.
+    Shows only semantic errors and warnings — undeclared variables,
+    ambiguous declarations, missing semicolons, and invalid types.
     """
     source   = editor.get("1.0", "end-1c")
     analyzer = SemanticAnalyzer()
     results  = analyzer.analyze(source)
 
     if not results:
-        _show_output(["Compilation successful. No errors found."])
+        _show_output(["── Semantic output ───────────────────────────────────", "", "No semantic issues found."])
         return
 
-    lines = []
+    lines = ["── Semantic output ───────────────────────────────────", ""]
     for r in results:
-        lines.append(f"main.ts:{r.line} - error:  {r.message}")
+        lines.append(f"main.ts:{r.line} - {r.severity}:  {r.message}")
 
+    errors   = [r for r in results if r.is_error()]
+    warnings = [r for r in results if r.is_warning()]
     lines.append("")
-    lines.append(f"Found {len(results)} error(s).")
+    lines.append(f"Found {len(errors)} error(s), {len(warnings)} warning(s).")
     _show_output(lines)
+
 
 def clear_output():
     _show_output([])
@@ -126,8 +189,11 @@ file_menu.add_command(label="Exit",  command=root.quit)
 
 run_menu = Menu(menu_bar, tearoff=0)
 menu_bar.add_cascade(label="Run", menu=run_menu)
-run_menu.add_command(label="Tokenize       Ctrl+L", command=run_lexer)
-run_menu.add_command(label="Analyze        Ctrl+R", command=run_semantic)
+run_menu.add_command(label="Compile        Ctrl+B", command=run_compile)
+run_menu.add_separator()
+run_menu.add_command(label="Lexer          Ctrl+L", command=run_lexer)
+run_menu.add_command(label="Parser         Ctrl+P", command=run_parser)
+run_menu.add_command(label="Semantic       Ctrl+S", command=run_semantic)
 run_menu.add_separator()
 run_menu.add_command(label="Clear output",           command=clear_output)
 
@@ -157,16 +223,30 @@ toolbar = Frame(root, bg="#2b2b2b")
 toolbar.pack(fill="x", padx=6, pady=(4, 0))
 
 tk.Button(
-    toolbar, text="▶  Tokenize",
-    command=run_lexer,
+    toolbar, text="▶  Compile",
+    command=run_compile,
     bg="#0e639c", fg="white", font=("Consolas", 10, "bold"),
     relief="flat", padx=12, pady=4, cursor="hand2"
 ).pack(side="left")
 
 tk.Button(
-    toolbar, text="▶  Analyze",
+    toolbar, text="Lexer",
+    command=run_lexer,
+    bg="#3c3c3c", fg="#cccccc", font=("Consolas", 10),
+    relief="flat", padx=12, pady=4, cursor="hand2"
+).pack(side="left", padx=(6, 0))
+
+tk.Button(
+    toolbar, text="Parser",
+    command=run_parser,
+    bg="#3c3c3c", fg="#cccccc", font=("Consolas", 10),
+    relief="flat", padx=12, pady=4, cursor="hand2"
+).pack(side="left", padx=(6, 0))
+
+tk.Button(
+    toolbar, text="Semantic",
     command=run_semantic,
-    bg="#1e8a4a", fg="white", font=("Consolas", 10, "bold"),
+    bg="#3c3c3c", fg="#cccccc", font=("Consolas", 10),
     relief="flat", padx=12, pady=4, cursor="hand2"
 ).pack(side="left", padx=(6, 0))
 
@@ -176,12 +256,6 @@ tk.Button(
     bg="#3c3c3c", fg="#cccccc", font=("Consolas", 10),
     relief="flat", padx=12, pady=4, cursor="hand2"
 ).pack(side="left", padx=(6, 0))
-
-tk.Label(
-    toolbar,
-    text="Write TypeScript code above and click Analyze",
-    bg="#2b2b2b", fg="#6a9955", font=("Consolas", 9)
-).pack(side="left", padx=(14, 0))
 
 # ── Output panel ──────────────────────────────────────────────────────────────
 output_frame = Frame(root, bg="#1e1e1e", height=220)
@@ -203,8 +277,10 @@ output = Text(
 output.pack(fill="both", expand=True, padx=8, pady=(2, 8))
 
 # ── Keyboard shortcuts ────────────────────────────────────────────────────────
+root.bind("<Control-b>", lambda e: run_compile())
 root.bind("<Control-l>", lambda e: run_lexer())
-root.bind("<Control-r>", lambda e: run_semantic())
+root.bind("<Control-p>", lambda e: run_parser())
+root.bind("<Control-s>", lambda e: run_semantic())
 
 # ── Init ──────────────────────────────────────────────────────────────────────
 _update_line_numbers()
