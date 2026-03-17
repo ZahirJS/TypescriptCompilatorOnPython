@@ -128,6 +128,9 @@ class SemanticAnalyzer:
         if first.type == Types.KEYWORD_FUNCTION:
             return self._validate_function_declaration(tokens, line_number)
 
+        if first.type == Types.IDENTIFIER:
+            return self._validate_assignment(tokens, line_number)
+
         return self._invalid(
             f'Unrecognized pattern starting with "{first.value}".',
             line_number
@@ -278,6 +281,27 @@ class SemanticAnalyzer:
         return None
 
     # -------------------------------------------------------------------------
+    # Pattern 3 — assignment
+    # x = 0;
+    # -------------------------------------------------------------------------
+
+    def _validate_assignment(self, tokens, line_number: int) -> AnalysisResult | None:
+        """
+        Validates the pattern:  <identifier> = <value> ;
+        Warns if the variable was never declared.
+        """
+        name = tokens[0].value
+
+        # if the variable was never declared, warn the user
+        if not self.symbol_table.exists(name):
+            return self._warning(
+                f'"{name}" is used but was never declared.',
+                line_number
+            )
+
+        return None
+
+    # -------------------------------------------------------------------------
     # Result builders — keep the result construction in one place
     # -------------------------------------------------------------------------
 
@@ -286,6 +310,9 @@ class SemanticAnalyzer:
 
     def _invalid(self, message: str, line: int) -> AnalysisResult:
         return AnalysisResult(message, line, Severity.ERROR)
+
+    def _warning(self, message: str, line: int) -> AnalysisResult:
+        return AnalysisResult(message, line, Severity.WARNING)
 
     def _ambiguous(self, message: str, line: int) -> AnalysisResult:
         # ambiguous means the same variable exists with a different type —
