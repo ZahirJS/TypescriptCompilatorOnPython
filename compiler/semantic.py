@@ -145,54 +145,29 @@ class SemanticAnalyzer:
 
     def _validate_variable_declaration(self, tokens, line_number: int) -> AnalysisResult | None:
         """
-        Validates the pattern:  let <identifier> : <data type> ;
-        Also checks the symbol table for duplicate declarations.
+        Validates meaning only — structure is the parser's responsibility.
+        Checks: is the type valid? was this variable already declared?
 
-        Valid:      let x: number;
-        Invalid:    let 2x: number;   (identifier starts with digit)
-        Ambiguous:  let x: string;    (x was already declared as number)
+        Does NOT check identifier validity — that belongs to the parser.
         """
 
-        # we need at least:  let  x  :  number  ;  → 5 tokens
         if len(tokens) < 5:
-            return self._invalid(
-                "Incomplete variable declaration.",
-                line_number
-            )
+            return None  # incomplete structure — parser will catch this
 
-        keyword    = tokens[0]   # let / const
-        identifier = tokens[1]   # variable name
-        colon      = tokens[2]   # :
-        data_type  = tokens[3]   # number / string / boolean
-        semicolon  = tokens[4]   # ;
+        identifier = tokens[1]
+        colon      = tokens[2]
+        data_type  = tokens[3]
 
-        # the name must be a valid identifier
+        # if the identifier is not valid, the parser already reported it
+        # we skip semantic validation for this line entirely
         if identifier.type != Types.IDENTIFIER:
-            return self._invalid(
-                f'"{identifier.value}" is not a valid identifier. '
-                f'Variable names must start with a letter or underscore.',
-                line_number
-            )
-
-        # the colon must be present
-        if colon.type != Types.OP_COLON:
-            return self._invalid(
-                f'Expected ":" after "{identifier.value}" but found "{colon.value}".',
-                line_number
-            )
+            return None
 
         # the type annotation must be a recognized data type
         if data_type.type not in VALID_DATA_TYPES:
             return self._invalid(
                 f'"{data_type.value}" is not a valid data type. '
                 f'Valid types are: number, string, boolean.',
-                line_number
-            )
-
-        # the statement must end with a semicolon
-        if semicolon.type != Types.SEMICOLON:
-            return self._invalid(
-                f'Expected ";" at the end of the declaration but found "{semicolon.value}".',
                 line_number
             )
 
@@ -228,54 +203,18 @@ class SemanticAnalyzer:
         Validates the pattern:  function <identifier> ( ) : <return type> {
         """
 
-        # we need at least:  function  main  (  )  :  void  {  → 7 tokens
         if len(tokens) < 7:
-            return self._invalid(
-                "Incomplete function declaration.",
-                line_number
-            )
+            return None  # incomplete structure — parser will catch this
 
-        keyword     = tokens[0]
         name        = tokens[1]
-        open_paren  = tokens[2]
-        close_paren = tokens[3]
-        colon       = tokens[4]
         return_type = tokens[5]
-        open_brace  = tokens[6]
 
         if name.type != Types.IDENTIFIER:
-            return self._invalid(
-                f'Expected a function name but found "{name.value}".',
-                line_number
-            )
-
-        if open_paren.type != Types.OPEN_PAREN:
-            return self._invalid(
-                f'Expected "(" after function name but found "{open_paren.value}".',
-                line_number
-            )
-
-        if close_paren.type != Types.CLOSE_PAREN:
-            return self._invalid(
-                f'Expected ")" but found "{close_paren.value}".',
-                line_number
-            )
-
-        if colon.type != Types.OP_COLON:
-            return self._invalid(
-                f'Expected ":" before return type but found "{colon.value}".',
-                line_number
-            )
+            return None  # parser already caught this
 
         if return_type.type not in VALID_DATA_TYPES and return_type.type != Types.KEYWORD_VOID:
             return self._invalid(
                 f'"{return_type.value}" is not a valid return type.',
-                line_number
-            )
-
-        if open_brace.type != Types.OPEN_BRACE:
-            return self._invalid(
-                f'Expected "{{" to open the function body but found "{open_brace.value}".',
                 line_number
             )
 
