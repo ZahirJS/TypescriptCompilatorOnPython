@@ -12,6 +12,17 @@ from compiler.lexer import Lexer
 
 
 # =============================================================================
+# Severity — how serious is the problem?
+# Errors mean the code cannot compile. Warnings mean something is suspicious
+# but the compiler can continue processing.
+# =============================================================================
+
+class Severity:
+    ERROR   = "error"
+    WARNING = "warning"
+
+
+# =============================================================================
 # Results — every analysis produces one of these
 # =============================================================================
 
@@ -20,12 +31,19 @@ class AnalysisResult:
     Wraps the outcome of analyzing one line.
     Keeps the display logic out of the analyzer itself.
     """
-    def __init__(self, message: str, line: int):
+    def __init__(self, message: str, line: int, severity: str = Severity.ERROR):
         self.message  = message
         self.line     = line
+        self.severity = severity
+
+    def is_error(self):
+        return self.severity == Severity.ERROR
+
+    def is_warning(self):
+        return self.severity == Severity.WARNING
 
     def __repr__(self):
-        return f"[ERROR] line {self.line}: {self.message}"
+        return f"[{self.severity.upper()}] line {self.line}: {self.message}"
 
 
 # =============================================================================
@@ -75,7 +93,8 @@ class SemanticAnalyzer:
 
     def analyze(self, source: str) -> list[AnalysisResult]:
         """
-        Entry point — analyzes every line in the source and returns results.
+        Entry point — analyzes every line in the source and returns only
+        errors and warnings. Lines that are valid produce nothing.
         """
         results = []
         for line_number, line in enumerate(source.splitlines(), start=1):
@@ -91,7 +110,7 @@ class SemanticAnalyzer:
     # Line analysis — decides which pattern to try
     # -------------------------------------------------------------------------
 
-    def _analyze_line(self, line: str, line_number: int) -> AnalysisResult:
+    def _analyze_line(self, line: str, line_number: int) -> AnalysisResult | None:
         """
         Tokenizes a single line and decides which pattern it matches.
         """
@@ -99,7 +118,7 @@ class SemanticAnalyzer:
         tokens = [t for t in tokens if t.type != Types.END]
 
         if not tokens:
-            return self._invalid("Empty line.", line_number)
+            return None
 
         first = tokens[0]
 
@@ -120,7 +139,7 @@ class SemanticAnalyzer:
     # const _name: string;
     # -------------------------------------------------------------------------
 
-    def _validate_variable_declaration(self, tokens, line_number: int) -> AnalysisResult:
+    def _validate_variable_declaration(self, tokens, line_number: int) -> AnalysisResult | None:
         """
         Validates the pattern:  let <identifier> : <data type> ;
         Also checks the symbol table for duplicate declarations.
@@ -193,17 +212,14 @@ class SemanticAnalyzer:
 
         # all good — register the variable in the symbol table
         self.symbol_table.declare(name, type_name, line_number)
-        return self._valid(
-            f'{keyword.value} {name} → {type_name}',
-            line_number
-        )
+        return None
 
     # -------------------------------------------------------------------------
     # Pattern 2 — function declaration
     # function main(): void {
     # -------------------------------------------------------------------------
 
-    def _validate_function_declaration(self, tokens, line_number: int) -> AnalysisResult:
+    def _validate_function_declaration(self, tokens, line_number: int) -> AnalysisResult | None:
         """
         Validates the pattern:  function <identifier> ( ) : <return type> {
         """
@@ -259,21 +275,19 @@ class SemanticAnalyzer:
                 line_number
             )
 
-        return self._valid(
-            f'function {name.value}(): {return_type.value}',
-            line_number
-        )
+        return None
 
     # -------------------------------------------------------------------------
     # Result builders — keep the result construction in one place
     # -------------------------------------------------------------------------
 
-    def _valid(self, message: str, line: int) -> AnalysisResult:
+    def _valid(self, message: str, line: int) -> None:
         return None
 
     def _invalid(self, message: str, line: int) -> AnalysisResult:
-        return AnalysisResult(message, line)
+        return AnalysisResult(message, line, Severity.ERROR)
 
     def _ambiguous(self, message: str, line: int) -> AnalysisResult:
-        # ambiguous is technically valid syntax but semantically suspicious
-        return AnalysisResult(f"AMBIGUITY — {message}", line)
+        # ambiguous means the same variable exists with a different type —
+        # the compiler cannot know which one the programmer intended
+        return AnalysisResult(f"AMBIGUITY — {message}", line, Severity.WARNING)
