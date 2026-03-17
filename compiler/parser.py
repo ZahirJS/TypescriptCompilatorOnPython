@@ -80,6 +80,10 @@ class Parser:
             return self._parse_function_declaration(tokens, line_number)
 
         if first.type == Types.IDENTIFIER:
+            if first.value == "import":
+                return self._parse_import(tokens, line_number)
+            if first.value == "console" and len(tokens) > 1 and tokens[1].value == ".":
+                return self._parse_console_log(tokens, line_number)
             return self._parse_assignment(tokens, line_number)
 
         return self._unknown(
@@ -251,6 +255,146 @@ class Parser:
         return self._valid(
             "Assignment",
             f'{identifier.value} = ...',
+            line_number
+        )
+
+    # -------------------------------------------------------------------------
+    # Pattern 4 — import statement
+    # import something from "somewhere";
+    # import { x, y } from "somewhere";
+    # -------------------------------------------------------------------------
+
+    def _parse_import(self, tokens, line_number: int) -> ParseResult:
+        """
+        Expected structure:  import <identifier or { }> from "<path>" ;
+        Checks that the import keyword is followed by a valid structure.
+        """
+
+        # minimum:  import  x  from  "path"  ;  → 5 tokens
+        if len(tokens) < 5:
+            return self._invalid(
+                "Import statement",
+                'Incomplete — expected: import <name> from "<path>" ;',
+                line_number
+            )
+
+        # find the "from" keyword position — it separates what we import from where
+        from_index = next(
+            (i for i, t in enumerate(tokens) if t.value == "from"),
+            None
+        )
+
+        if from_index is None:
+            return self._invalid(
+                "Import statement",
+                'Missing "from" keyword.',
+                line_number
+            )
+
+        # after "from" we need a string literal path and a semicolon
+        if from_index + 1 >= len(tokens):
+            return self._invalid(
+                "Import statement",
+                'Expected a path after "from".',
+                line_number
+            )
+
+        path      = tokens[from_index + 1]
+        semicolon = tokens[-1]
+
+        if path.type != Types.STRING_LIT:
+            return self._invalid(
+                "Import statement",
+                f'Expected a quoted path after "from" but found "{path.value}".',
+                line_number
+            )
+
+        if semicolon.type != Types.SEMICOLON:
+            return self._invalid(
+                "Import statement",
+                'Missing ";" at the end of import.',
+                line_number
+            )
+
+        return self._valid(
+            "Import statement",
+            f'import ... from "{path.value}";',
+            line_number
+        )
+
+    # -------------------------------------------------------------------------
+    # Pattern 5 — console.log call
+    # console.log(x);
+    # -------------------------------------------------------------------------
+
+    def _parse_console_log(self, tokens, line_number: int) -> ParseResult:
+        """
+        Expected structure:  console . log ( <argument> ) ;
+        The argument can be an identifier, a number, or a string literal.
+        """
+
+        # minimum:  console  .  log  (  x  )  ;  → 7 tokens
+        if len(tokens) < 7:
+            return self._invalid(
+                "console.log",
+                "Incomplete — expected: console.log(<value>);",
+                line_number
+            )
+
+        dot         = tokens[1]
+        log         = tokens[2]
+        open_paren  = tokens[3]
+        argument    = tokens[4]
+        close_paren = tokens[5]
+        semicolon   = tokens[6]
+
+        if dot.value != ".":
+            return self._invalid(
+                "console.log",
+                f'Expected "." after "console" but found "{dot.value}".',
+                line_number
+            )
+
+        if log.value != "log":
+            return self._invalid(
+                "console.log",
+                f'Expected "log" but found "{log.value}".',
+                line_number
+            )
+
+        if open_paren.type != Types.OPEN_PAREN:
+            return self._invalid(
+                "console.log",
+                f'Expected "(" but found "{open_paren.value}".',
+                line_number
+            )
+
+        # the argument must be an identifier, number, or string literal
+        valid_argument_types = {Types.IDENTIFIER, Types.NUMBER, Types.STRING_LIT}
+        if argument.type not in valid_argument_types:
+            return self._invalid(
+                "console.log",
+                f'Expected a value inside console.log() but found "{argument.value}".',
+                line_number
+            )
+
+        if close_paren.type != Types.CLOSE_PAREN:
+            return self._invalid(
+                "console.log",
+                f'Expected ")" but found "{close_paren.value}".',
+                line_number
+            )
+
+        if semicolon.type != Types.SEMICOLON:
+            return self._invalid(
+                "console.log",
+                'Missing ";" after console.log().',
+                line_number
+            )
+
+        return self._valid(
+            "console.log",
+            f'console.log({argument.value})',
             line_number
         )
 

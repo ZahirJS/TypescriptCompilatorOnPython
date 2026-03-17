@@ -129,12 +129,13 @@ class SemanticAnalyzer:
             return self._validate_function_declaration(tokens, line_number)
 
         if first.type == Types.IDENTIFIER:
+            if first.value == "console" and len(tokens) > 1 and tokens[1].value == ".":
+                return self._validate_console_log(tokens, line_number)
+            if first.value == "import":
+                return None  # imports have no semantic meaning to validate yet
             return self._validate_assignment(tokens, line_number)
 
-        return self._invalid(
-            f'Unrecognized pattern starting with "{first.value}".',
-            line_number
-        )
+        return None
 
     # -------------------------------------------------------------------------
     # Pattern 1 — variable declaration
@@ -234,13 +235,13 @@ class SemanticAnalyzer:
                 line_number
             )
 
-        keyword     = tokens[0]   # function
-        name        = tokens[1]   # function name
-        open_paren  = tokens[2]   # (
-        close_paren = tokens[3]   # )
-        colon       = tokens[4]   # :
-        return_type = tokens[5]   # void / number / string / boolean
-        open_brace  = tokens[6]   # {
+        keyword     = tokens[0]
+        name        = tokens[1]
+        open_paren  = tokens[2]
+        close_paren = tokens[3]
+        colon       = tokens[4]
+        return_type = tokens[5]
+        open_brace  = tokens[6]
 
         if name.type != Types.IDENTIFIER:
             return self._invalid(
@@ -303,11 +304,39 @@ class SemanticAnalyzer:
         return None
 
     # -------------------------------------------------------------------------
-    # Result builders — keep the result construction in one place
+    # Pattern 4 — console.log call
+    # console.log(x);
+    # Only checks if the argument variable exists in the symbol table.
+    # Structure validation (parentheses, semicolons) belongs to the parser.
     # -------------------------------------------------------------------------
 
-    def _valid(self, message: str, line: int) -> None:
+    def _validate_console_log(self, tokens, line_number: int) -> AnalysisResult | None:
+        """
+        Checks that the argument passed to console.log was declared.
+        Numbers and string literals are always valid — no declaration needed.
+        """
+        if len(tokens) < 7:
+            return None  # incomplete structure — parser will catch this
+
+        argument = tokens[4]
+
+        # numbers and strings are literals — they don't need to be declared
+        if argument.type in (Types.NUMBER, Types.STRING_LIT):
+            return None
+
+        # if the argument is an identifier, it must exist in the symbol table
+        if argument.type == Types.IDENTIFIER:
+            if not self.symbol_table.exists(argument.value):
+                return self._warning(
+                    f'"{argument.value}" passed to console.log was never declared.',
+                    line_number
+                )
+
         return None
+
+    # -------------------------------------------------------------------------
+    # Result builders — keep the result construction in one place
+    # -------------------------------------------------------------------------
 
     def _invalid(self, message: str, line: int) -> AnalysisResult:
         return AnalysisResult(message, line, Severity.ERROR)
