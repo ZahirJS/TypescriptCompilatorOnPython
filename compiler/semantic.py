@@ -283,26 +283,20 @@ class SemanticAnalyzer:
     # -------------------------------------------------------------------------
     # Pattern 3 — assignment
     # x = 0;
+    # Semicolon validation belongs to the parser — structure is its responsibility.
+    # The semantic analyzer only checks meaning: was this variable declared?
     # -------------------------------------------------------------------------
 
     def _validate_assignment(self, tokens, line_number: int) -> AnalysisResult | None:
         """
         Validates the pattern:  <identifier> = <value> ;
-        Warns if the variable was never declared or if the semicolon is missing.
+        Only checks whether the variable was declared — nothing else.
         """
         name = tokens[0].value
 
-        # if the variable was never declared, warn the user
         if not self.symbol_table.exists(name):
             return self._warning(
                 f'"{name}" is used but was never declared.',
-                line_number
-            )
-
-        # the last token must be a semicolon
-        if tokens[-1].type != Types.SEMICOLON:
-            return self._warning(
-                f'Missing ";" at the end of statement.',
                 line_number
             )
 

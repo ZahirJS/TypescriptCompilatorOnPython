@@ -47,32 +47,29 @@ def run_compile():
     Runs all three phases in order and shows only errors and warnings.
     This is what a real compiler shows the user — silence means success.
     """
-    source   = editor.get("1.0", "end-1c")
-    lines    = []
+    source = editor.get("1.0", "end-1c")
 
     # phase 1 — parser checks structure
-    parser          = Parser()
-    parse_results   = parser.parse(source)
-    structure_errors = [r for r in parse_results if not r.is_valid]
+    structure_errors = [
+        (r.line, "error", r.message)
+        for r in Parser().parse(source)
+        if not r.is_valid
+    ]
 
     # phase 2 — semantic checks meaning
-    analyzer        = SemanticAnalyzer()
-    semantic_results = analyzer.analyze(source)
+    semantic_results = [
+        (r.line, r.severity, r.message)
+        for r in SemanticAnalyzer().analyze(source)
+    ]
 
-    # combine both into one report
-    # if the parser already flagged a line for structure, skip semantic
-    # results for the same line to avoid reporting the same issue twice
-    structure_list = [(r.line, "error",    r.message) for r in structure_errors]
-    flagged_lines  = {r[0] for r in structure_list}
-    semantic_list  = [(r.line, r.severity, r.message) for r in semantic_results
-                      if r.line not in flagged_lines]
-
-    all_results = sorted(structure_list + semantic_list, key=lambda r: r[0])
+    # combine and sort by line number
+    all_results = sorted(structure_errors + semantic_results, key=lambda r: r[0])
 
     if not all_results:
         _show_output(["Compilation successful. No errors found."])
         return
 
+    lines  = []
     for line_number, severity, message in all_results:
         lines.append(f"main.ts:{line_number} - {severity}:  {message}")
 
@@ -108,8 +105,7 @@ def run_parser():
     Useful for seeing whether each line matches a known pattern.
     """
     source  = editor.get("1.0", "end-1c")
-    parser  = Parser()
-    results = parser.parse(source)
+    results = Parser().parse(source)
 
     lines = ["── Parser output ─────────────────────────────────────", ""]
     for r in results:
@@ -122,11 +118,10 @@ def run_parser():
 def run_semantic():
     """
     Shows only semantic errors and warnings — undeclared variables,
-    ambiguous declarations, missing semicolons, and invalid types.
+    ambiguous declarations, and invalid types.
     """
     source   = editor.get("1.0", "end-1c")
-    analyzer = SemanticAnalyzer()
-    results  = analyzer.analyze(source)
+    results  = SemanticAnalyzer().analyze(source)
 
     if not results:
         _show_output(["── Semantic output ───────────────────────────────────", "", "No semantic issues found."])
