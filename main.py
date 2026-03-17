@@ -69,7 +69,7 @@ def run_compile():
         _show_output(["Compilation successful. No errors found."])
         return
 
-    lines  = []
+    lines = []
     for line_number, severity, message in all_results:
         lines.append(f"main.ts:{line_number} - {severity}:  {message}")
 
@@ -120,8 +120,8 @@ def run_semantic():
     Shows only semantic errors and warnings — undeclared variables,
     ambiguous declarations, and invalid types.
     """
-    source   = editor.get("1.0", "end-1c")
-    results  = SemanticAnalyzer().analyze(source)
+    source  = editor.get("1.0", "end-1c")
+    results = SemanticAnalyzer().analyze(source)
 
     if not results:
         _show_output(["── Semantic output ───────────────────────────────────", "", "No semantic issues found."])
@@ -135,6 +135,29 @@ def run_semantic():
     warnings = [r for r in results if r.is_warning()]
     lines.append("")
     lines.append(f"Found {len(errors)} error(s), {len(warnings)} warning(s).")
+    _show_output(lines)
+
+
+def run_symbol_table():
+    """
+    Runs the semantic analyzer and shows only the symbol table —
+    every variable that was successfully declared and its type.
+    """
+    source   = editor.get("1.0", "end-1c")
+    analyzer = SemanticAnalyzer()
+    analyzer.analyze(source)  # populate the symbol table
+
+    entries = analyzer.symbol_table.all_entries()
+    lines   = ["── Symbol Table ──────────────────────────────────────", ""]
+
+    if not entries:
+        lines.append("  (no variables declared)")
+    else:
+        lines.append(f"  {'Name':<20} {'Type':<12} {'Line'}")
+        lines.append(f"  {'─'*20} {'─'*12} {'─'*4}")
+        for name, info in entries.items():
+            lines.append(f"  {name:<20} {info['type']:<12} {info['line']}")
+
     _show_output(lines)
 
 
@@ -184,13 +207,14 @@ file_menu.add_command(label="Exit",  command=root.quit)
 
 run_menu = Menu(menu_bar, tearoff=0)
 menu_bar.add_cascade(label="Run", menu=run_menu)
-run_menu.add_command(label="Compile        Ctrl+B", command=run_compile)
+run_menu.add_command(label="Compile          Ctrl+B", command=run_compile)
 run_menu.add_separator()
-run_menu.add_command(label="Lexer          Ctrl+L", command=run_lexer)
-run_menu.add_command(label="Parser         Ctrl+P", command=run_parser)
-run_menu.add_command(label="Semantic       Ctrl+S", command=run_semantic)
+run_menu.add_command(label="Lexer            Ctrl+L", command=run_lexer)
+run_menu.add_command(label="Parser           Ctrl+P", command=run_parser)
+run_menu.add_command(label="Semantic         Ctrl+S", command=run_semantic)
+run_menu.add_command(label="Symbol Table     Ctrl+T", command=run_symbol_table)
 run_menu.add_separator()
-run_menu.add_command(label="Clear output",           command=clear_output)
+run_menu.add_command(label="Clear output",             command=clear_output)
 
 # ── Editor area ───────────────────────────────────────────────────────────────
 editor_frame = Frame(root, bg="#1e1e1e")
@@ -246,6 +270,13 @@ tk.Button(
 ).pack(side="left", padx=(6, 0))
 
 tk.Button(
+    toolbar, text="Symbol Table",
+    command=run_symbol_table,
+    bg="#3c3c3c", fg="#cccccc", font=("Consolas", 10),
+    relief="flat", padx=12, pady=4, cursor="hand2"
+).pack(side="left", padx=(6, 0))
+
+tk.Button(
     toolbar, text="✕  Clear",
     command=clear_output,
     bg="#3c3c3c", fg="#cccccc", font=("Consolas", 10),
@@ -276,6 +307,7 @@ root.bind("<Control-b>", lambda e: run_compile())
 root.bind("<Control-l>", lambda e: run_lexer())
 root.bind("<Control-p>", lambda e: run_parser())
 root.bind("<Control-s>", lambda e: run_semantic())
+root.bind("<Control-t>", lambda e: run_symbol_table())
 
 # ── Init ──────────────────────────────────────────────────────────────────────
 _update_line_numbers()
