@@ -43,7 +43,7 @@ class Types:
     Central registry of every TokenType.
     Import this wherever a token type needs to be referenced.
 
-        from token import Types
+        from compiler.token import Types
         if token.type == Types.KEYWORD_LET: ...
     """
 
@@ -59,7 +59,7 @@ class Types:
     # ── Identifier ───────────────────────────────────────────────────────────
     IDENTIFIER = TokenType("IDENTIFIER", "Identifier")
 
-    # ── Keywords ──────────────────────────────────────────────────────────────
+    # ── Keywords ─────────────────────────────────────────────────────────────
     KEYWORD_LET      = TokenType("KEYWORD_LET",      "Keyword")
     KEYWORD_CONST    = TokenType("KEYWORD_CONST",    "Keyword")
     KEYWORD_FUNCTION = TokenType("KEYWORD_FUNCTION", "Keyword")
@@ -90,6 +90,7 @@ class Types:
     OP_GREATER = TokenType("OP_GREATER", "Operator")  # >
     OP_LESS    = TokenType("OP_LESS",    "Operator")  # <
     OP_COLON   = TokenType("OP_COLON",   "Operator")  # : used in type annotations
+    OP_DOT     = TokenType("OP_DOT",     "Operator")  # . used in console.log
 
     # ── Delimiters ────────────────────────────────────────────────────────────
     SEMICOLON     = TokenType("SEMICOLON",     "Delimiter")  # ;
@@ -139,6 +140,7 @@ SINGLE_CHAR_SYMBOLS: dict[str, TokenType] = {
     ">": Types.OP_GREATER,
     "<": Types.OP_LESS,
     ":": Types.OP_COLON,
+    ".": Types.OP_DOT,
     ";": Types.SEMICOLON,
     ",": Types.COMMA,
     "(": Types.OPEN_PAREN,
