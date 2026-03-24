@@ -46,6 +46,14 @@ class Parser:
     only that the tokens are in the right order.
     """
 
+    # relational operators valid inside an if condition
+    RELATIONAL_OPS = {
+        Types.OP_EQUAL,
+        Types.OP_NOT_EQ,
+        Types.OP_GREATER,
+        Types.OP_LESS,
+    }
+
     def parse(self, source: str) -> list[ParseResult]:
         """
         Entry point — parses every line and returns a result for each one.
@@ -79,6 +87,9 @@ class Parser:
         if first.type == Types.KEYWORD_FUNCTION:
             return self._parse_function_declaration(tokens, line_number)
 
+        if first.type == Types.KEYWORD_IF:
+            return self._parse_if_statement(tokens, line_number)
+
         if first.type == Types.IDENTIFIER:
             if first.value == "import":
                 return self._parse_import(tokens, line_number)
@@ -104,7 +115,7 @@ class Parser:
         if len(tokens) < 5:
             return self._invalid(
                 "Variable declaration",
-                "Incomplete — expected: let <name> : <type> ;",
+                "Incomplete — expected: let <n> : <type> ;",
                 line_number
             )
 
@@ -159,7 +170,7 @@ class Parser:
         if len(tokens) < 7:
             return self._invalid(
                 "Function declaration",
-                "Incomplete — expected: function <name> ( ) : <type> {",
+                "Incomplete — expected: function <n> ( ) : <type> {",
                 line_number
             )
 
@@ -231,7 +242,7 @@ class Parser:
         if len(tokens) < 2:
             return self._invalid(
                 "Assignment",
-                "Incomplete — expected: <name> = <value> ;",
+                "Incomplete — expected: <n> = <value> ;",
                 line_number
             )
 
@@ -261,24 +272,19 @@ class Parser:
     # -------------------------------------------------------------------------
     # Pattern 4 — import statement
     # import something from "somewhere";
-    # import { x, y } from "somewhere";
     # -------------------------------------------------------------------------
 
     def _parse_import(self, tokens, line_number: int) -> ParseResult:
         """
         Expected structure:  import <identifier or { }> from "<path>" ;
-        Checks that the import keyword is followed by a valid structure.
         """
-
-        # minimum:  import  x  from  "path"  ;  → 5 tokens
         if len(tokens) < 5:
             return self._invalid(
                 "Import statement",
-                'Incomplete — expected: import <name> from "<path>" ;',
+                'Incomplete — expected: import <n> from "<path>" ;',
                 line_number
             )
 
-        # find the "from" keyword position — it separates what we import from where
         from_index = next(
             (i for i, t in enumerate(tokens) if t.value == "from"),
             None
@@ -291,7 +297,6 @@ class Parser:
                 line_number
             )
 
-        # after "from" we need a string literal path and a semicolon
         if from_index + 1 >= len(tokens):
             return self._invalid(
                 "Import statement",
@@ -330,10 +335,7 @@ class Parser:
     def _parse_console_log(self, tokens, line_number: int) -> ParseResult:
         """
         Expected structure:  console . log ( <argument> ) ;
-        The argument can be an identifier, a number, or a string literal.
         """
-
-        # minimum:  console  .  log  (  x  )  ;  → 7 tokens
         if len(tokens) < 7:
             return self._invalid(
                 "console.log",
@@ -369,7 +371,6 @@ class Parser:
                 line_number
             )
 
-        # the argument must be an identifier, number, or string literal
         valid_argument_types = {Types.IDENTIFIER, Types.NUMBER, Types.STRING_LIT}
         if argument.type not in valid_argument_types:
             return self._invalid(
@@ -395,6 +396,97 @@ class Parser:
         return self._valid(
             "console.log",
             f'console.log({argument.value})',
+            line_number
+        )
+
+    # -------------------------------------------------------------------------
+    # Pattern 6 — if statement
+    # if( variable == 3 ){
+    # -------------------------------------------------------------------------
+
+    def _parse_if_statement(self, tokens, line_number: int) -> ParseResult:
+        """
+        Expected structure:  if ( <identifier> <relational_op> <value> ) {
+
+        The condition must use a relational operator (==, !=, >, <).
+        Using = instead of == is a structural error caught here.
+
+        Valid:    if( x == 3 ){
+        Invalid:  if( x = 3 ){    ← assignment operator, not relational
+        Invalid:  if( x == 3 )    ← missing opening brace
+        Invalid:  if( == x 3 ){   ← wrong order
+        """
+
+        # minimum:  if  (  x  ==  3  )  {  → 7 tokens
+        if len(tokens) < 7:
+            return self._invalid(
+                "If statement",
+                "Incomplete — expected: if( <var> <op> <value> ){",
+                line_number
+            )
+
+        open_paren  = tokens[1]
+        identifier  = tokens[2]
+        operator    = tokens[3]
+        value       = tokens[4]
+        close_paren = tokens[5]
+        open_brace  = tokens[6]
+
+        if open_paren.type != Types.OPEN_PAREN:
+            return self._invalid(
+                "If statement",
+                f'Expected "(" after "if" but found "{open_paren.value}".',
+                line_number
+            )
+
+        if identifier.type != Types.IDENTIFIER:
+            return self._invalid(
+                "If statement",
+                f'Expected a variable inside the condition but found "{identifier.value}".',
+                line_number
+            )
+
+        # using = instead of == is a very common mistake — give a specific message
+        if operator.type == Types.OP_ASSIGN:
+            return self._invalid(
+                "If statement",
+                f'Expected a relational operator (==, !=, >, <) but found "=" — did you mean "=="?',
+                line_number
+            )
+
+        if operator.type not in self.RELATIONAL_OPS:
+            return self._invalid(
+                "If statement",
+                f'Expected a relational operator (==, !=, >, <) but found "{operator.value}".',
+                line_number
+            )
+
+        # the value can be a number, string, boolean literal, or another identifier
+        valid_value_types = {Types.NUMBER, Types.STRING_LIT, Types.BOOL_LIT, Types.IDENTIFIER}
+        if value.type not in valid_value_types:
+            return self._invalid(
+                "If statement",
+                f'Expected a value to compare against but found "{value.value}".',
+                line_number
+            )
+
+        if close_paren.type != Types.CLOSE_PAREN:
+            return self._invalid(
+                "If statement",
+                f'Expected ")" to close the condition but found "{close_paren.value}".',
+                line_number
+            )
+
+        if open_brace.type != Types.OPEN_BRACE:
+            return self._invalid(
+                "If statement",
+                f'Expected "{{" to open the if body but found "{open_brace.value}".',
+                line_number
+            )
+
+        return self._valid(
+            "If statement",
+            f'if( {identifier.value} {operator.value} {value.value} ){{',
             line_number
         )
 

@@ -128,11 +128,14 @@ class SemanticAnalyzer:
         if first.type == Types.KEYWORD_FUNCTION:
             return self._validate_function_declaration(tokens, line_number)
 
+        if first.type == Types.KEYWORD_IF:
+            return self._validate_if_statement(tokens, line_number)
+
         if first.type == Types.IDENTIFIER:
             if first.value == "console" and len(tokens) > 1 and tokens[1].value == ".":
                 return self._validate_console_log(tokens, line_number)
             if first.value == "import":
-                return None  # imports have no semantic meaning to validate yet
+                return None
             return self._validate_assignment(tokens, line_number)
 
         return None
@@ -147,19 +150,15 @@ class SemanticAnalyzer:
         """
         Validates meaning only — structure is the parser's responsibility.
         Checks: is the type valid? was this variable already declared?
-
         Does NOT check identifier validity — that belongs to the parser.
         """
-
         if len(tokens) < 5:
             return None  # incomplete structure — parser will catch this
 
         identifier = tokens[1]
-        colon      = tokens[2]
         data_type  = tokens[3]
 
         # if the identifier is not valid, the parser already reported it
-        # we skip semantic validation for this line entirely
         if identifier.type != Types.IDENTIFIER:
             return None
 
@@ -202,7 +201,6 @@ class SemanticAnalyzer:
         """
         Validates the pattern:  function <identifier> ( ) : <return type> {
         """
-
         if len(tokens) < 7:
             return None  # incomplete structure — parser will catch this
 
@@ -246,7 +244,7 @@ class SemanticAnalyzer:
     # Pattern 4 — console.log call
     # console.log(x);
     # Only checks if the argument variable exists in the symbol table.
-    # Structure validation (parentheses, semicolons) belongs to the parser.
+    # Structure validation belongs to the parser.
     # -------------------------------------------------------------------------
 
     def _validate_console_log(self, tokens, line_number: int) -> AnalysisResult | None:
@@ -259,17 +257,46 @@ class SemanticAnalyzer:
 
         argument = tokens[4]
 
-        # numbers and strings are literals — they don't need to be declared
         if argument.type in (Types.NUMBER, Types.STRING_LIT):
             return None
 
-        # if the argument is an identifier, it must exist in the symbol table
         if argument.type == Types.IDENTIFIER:
             if not self.symbol_table.exists(argument.value):
                 return self._warning(
                     f'"{argument.value}" passed to console.log was never declared.',
                     line_number
                 )
+
+        return None
+
+    # -------------------------------------------------------------------------
+    # Pattern 5 — if statement
+    # if( x == 3 ){
+    # Only checks if the variable in the condition was declared.
+    # Structure validation (operators, braces) belongs to the parser.
+    # -------------------------------------------------------------------------
+
+    def _validate_if_statement(self, tokens, line_number: int) -> AnalysisResult | None:
+        """
+        Validates that the variable used in the if condition was declared.
+
+        Valid:    if( x == 3 ){      — x exists in symbol table
+        Warning:  if( cargo == 3 ){  — cargo was never declared
+        """
+        if len(tokens) < 7:
+            return None  # incomplete structure — parser will catch this
+
+        identifier = tokens[2]
+
+        # only validate if the condition is well-formed
+        if identifier.type != Types.IDENTIFIER:
+            return None
+
+        if not self.symbol_table.exists(identifier.value):
+            return self._warning(
+                f'"{identifier.value}" used in if condition was never declared.',
+                line_number
+            )
 
         return None
 
