@@ -111,9 +111,6 @@ class SemanticAnalyzer:
     # -------------------------------------------------------------------------
 
     def _analyze_line(self, line: str, line_number: int) -> AnalysisResult | None:
-        """
-        Tokenizes a single line and decides which pattern it matches.
-        """
         tokens = Lexer(line).tokenize_all()
         tokens = [t for t in tokens if t.type != Types.END]
 
@@ -131,6 +128,12 @@ class SemanticAnalyzer:
         if first.type == Types.KEYWORD_IF:
             return self._validate_if_statement(tokens, line_number)
 
+        if first.type == Types.KEYWORD_SWITCH:
+            return self._validate_switch_statement(tokens, line_number)
+
+        if first.type in (Types.KEYWORD_CASE, Types.KEYWORD_DEFAULT, Types.KEYWORD_BREAK):
+            return None  # structure only — parser handles these
+
         if first.type == Types.IDENTIFIER:
             if first.value == "console" and len(tokens) > 1 and tokens[1].value == ".":
                 return self._validate_console_log(tokens, line_number)
@@ -142,8 +145,6 @@ class SemanticAnalyzer:
 
     # -------------------------------------------------------------------------
     # Pattern 1 — variable declaration
-    # let x: number;
-    # const _name: string;
     # -------------------------------------------------------------------------
 
     def _validate_variable_declaration(self, tokens, line_number: int) -> AnalysisResult | None:
@@ -153,16 +154,14 @@ class SemanticAnalyzer:
         Does NOT check identifier validity — that belongs to the parser.
         """
         if len(tokens) < 5:
-            return None  # incomplete structure — parser will catch this
+            return None
 
         identifier = tokens[1]
         data_type  = tokens[3]
 
-        # if the identifier is not valid, the parser already reported it
         if identifier.type != Types.IDENTIFIER:
             return None
 
-        # the type annotation must be a recognized data type
         if data_type.type not in VALID_DATA_TYPES:
             return self._invalid(
                 f'"{data_type.value}" is not a valid data type. '
@@ -173,7 +172,6 @@ class SemanticAnalyzer:
         name      = identifier.value
         type_name = data_type.value
 
-        # check if this variable was already declared
         existing = self.symbol_table.lookup(name)
         if existing:
             if existing["type"] != type_name:
@@ -188,27 +186,22 @@ class SemanticAnalyzer:
                     line_number
                 )
 
-        # all good — register the variable in the symbol table
         self.symbol_table.declare(name, type_name, line_number)
         return None
 
     # -------------------------------------------------------------------------
     # Pattern 2 — function declaration
-    # function main(): void {
     # -------------------------------------------------------------------------
 
     def _validate_function_declaration(self, tokens, line_number: int) -> AnalysisResult | None:
-        """
-        Validates the pattern:  function <identifier> ( ) : <return type> {
-        """
         if len(tokens) < 7:
-            return None  # incomplete structure — parser will catch this
+            return None
 
         name        = tokens[1]
         return_type = tokens[5]
 
         if name.type != Types.IDENTIFIER:
-            return None  # parser already caught this
+            return None
 
         if return_type.type not in VALID_DATA_TYPES and return_type.type != Types.KEYWORD_VOID:
             return self._invalid(
@@ -220,15 +213,11 @@ class SemanticAnalyzer:
 
     # -------------------------------------------------------------------------
     # Pattern 3 — assignment
-    # x = 0;
-    # Semicolon validation belongs to the parser — structure is its responsibility.
-    # The semantic analyzer only checks meaning: was this variable declared?
     # -------------------------------------------------------------------------
 
     def _validate_assignment(self, tokens, line_number: int) -> AnalysisResult | None:
         """
-        Validates the pattern:  <identifier> = <value> ;
-        Only checks whether the variable was declared — nothing else.
+        Only checks whether the variable was declared.
         """
         name = tokens[0].value
 
@@ -241,19 +230,12 @@ class SemanticAnalyzer:
         return None
 
     # -------------------------------------------------------------------------
-    # Pattern 4 — console.log call
-    # console.log(x);
-    # Only checks if the argument variable exists in the symbol table.
-    # Structure validation belongs to the parser.
+    # Pattern 4 — console.log
     # -------------------------------------------------------------------------
 
     def _validate_console_log(self, tokens, line_number: int) -> AnalysisResult | None:
-        """
-        Checks that the argument passed to console.log was declared.
-        Numbers and string literals are always valid — no declaration needed.
-        """
         if len(tokens) < 7:
-            return None  # incomplete structure — parser will catch this
+            return None
 
         argument = tokens[4]
 
@@ -271,24 +253,17 @@ class SemanticAnalyzer:
 
     # -------------------------------------------------------------------------
     # Pattern 5 — if statement
-    # if( x == 3 ){
-    # Only checks if the variable in the condition was declared.
-    # Structure validation (operators, braces) belongs to the parser.
     # -------------------------------------------------------------------------
 
     def _validate_if_statement(self, tokens, line_number: int) -> AnalysisResult | None:
         """
         Validates that the variable used in the if condition was declared.
-
-        Valid:    if( x == 3 ){      — x exists in symbol table
-        Warning:  if( cargo == 3 ){  — cargo was never declared
         """
         if len(tokens) < 7:
-            return None  # incomplete structure — parser will catch this
+            return None
 
         identifier = tokens[2]
 
-        # only validate if the condition is well-formed
         if identifier.type != Types.IDENTIFIER:
             return None
 
@@ -301,7 +276,37 @@ class SemanticAnalyzer:
         return None
 
     # -------------------------------------------------------------------------
-    # Result builders — keep the result construction in one place
+    # Pattern 6 — switch statement
+    # switch( x ){
+    # Only checks if the variable inside switch() was declared.
+    # Structure validation belongs to the parser.
+    # -------------------------------------------------------------------------
+
+    def _validate_switch_statement(self, tokens, line_number: int) -> AnalysisResult | None:
+        """
+        Validates that the variable used in the switch was declared.
+
+        Valid:    switch( x ){      — x exists in symbol table
+        Warning:  switch( cargo ){  — cargo was never declared
+        """
+        if len(tokens) < 5:
+            return None
+
+        identifier = tokens[2]
+
+        if identifier.type != Types.IDENTIFIER:
+            return None
+
+        if not self.symbol_table.exists(identifier.value):
+            return self._warning(
+                f'"{identifier.value}" used in switch was never declared.',
+                line_number
+            )
+
+        return None
+
+    # -------------------------------------------------------------------------
+    # Result builders
     # -------------------------------------------------------------------------
 
     def _invalid(self, message: str, line: int) -> AnalysisResult:
@@ -311,6 +316,4 @@ class SemanticAnalyzer:
         return AnalysisResult(message, line, Severity.WARNING)
 
     def _ambiguous(self, message: str, line: int) -> AnalysisResult:
-        # ambiguous means the same variable exists with a different type —
-        # the compiler cannot know which one the programmer intended
         return AnalysisResult(f"AMBIGUITY — {message}", line, Severity.WARNING)

@@ -22,9 +22,9 @@ class ParseResult:
     """
 
     def __init__(self, pattern: str, is_valid: bool, message: str, line: int):
-        self.pattern  = pattern   # what kind of statement this is
-        self.is_valid = is_valid  # whether the structure is correct
-        self.message  = message   # description or error detail
+        self.pattern  = pattern
+        self.is_valid = is_valid
+        self.message  = message
         self.line     = line
 
     def __repr__(self):
@@ -42,8 +42,6 @@ class Parser:
     matches a known structural pattern of the language.
 
     It does not check meaning — only structure.
-    That means it does not care if a variable was already declared,
-    only that the tokens are in the right order.
     """
 
     # relational operators valid inside an if condition
@@ -57,8 +55,6 @@ class Parser:
     def parse(self, source: str) -> list[ParseResult]:
         """
         Entry point — parses every line and returns a result for each one.
-        Unlike the semantic analyzer, the parser reports both valid and
-        invalid lines so the user can see the full structural picture.
         """
         results = []
         for line_number, line in enumerate(source.splitlines(), start=1):
@@ -90,6 +86,18 @@ class Parser:
         if first.type == Types.KEYWORD_IF:
             return self._parse_if_statement(tokens, line_number)
 
+        if first.type == Types.KEYWORD_SWITCH:
+            return self._parse_switch_statement(tokens, line_number)
+
+        if first.type == Types.KEYWORD_CASE:
+            return self._parse_case_statement(tokens, line_number)
+
+        if first.type == Types.KEYWORD_DEFAULT:
+            return self._parse_default_statement(tokens, line_number)
+
+        if first.type == Types.KEYWORD_BREAK:
+            return self._parse_break_statement(tokens, line_number)
+
         if first.type == Types.IDENTIFIER:
             if first.value == "import":
                 return self._parse_import(tokens, line_number)
@@ -110,7 +118,6 @@ class Parser:
     def _parse_variable_declaration(self, tokens, line_number: int) -> ParseResult:
         """
         Expected structure:  let <identifier> : <data type> ;
-        Checks token order only — does not validate meaning.
         """
         if len(tokens) < 5:
             return self._invalid(
@@ -237,7 +244,6 @@ class Parser:
     def _parse_assignment(self, tokens, line_number: int) -> ParseResult:
         """
         Expected structure:  <identifier> = <value> ;
-        Only checks structure — does not verify the variable was declared.
         """
         if len(tokens) < 2:
             return self._invalid(
@@ -259,7 +265,7 @@ class Parser:
         if tokens[-1].type != Types.SEMICOLON:
             return self._invalid(
                 "Assignment",
-                f'Missing ";" at the end of statement.',
+                'Missing ";" at the end of statement.',
                 line_number
             )
 
@@ -276,7 +282,7 @@ class Parser:
 
     def _parse_import(self, tokens, line_number: int) -> ParseResult:
         """
-        Expected structure:  import <identifier or { }> from "<path>" ;
+        Expected structure:  import <identifier> from "<path>" ;
         """
         if len(tokens) < 5:
             return self._invalid(
@@ -407,17 +413,7 @@ class Parser:
     def _parse_if_statement(self, tokens, line_number: int) -> ParseResult:
         """
         Expected structure:  if ( <identifier> <relational_op> <value> ) {
-
-        The condition must use a relational operator (==, !=, >, <).
-        Using = instead of == is a structural error caught here.
-
-        Valid:    if( x == 3 ){
-        Invalid:  if( x = 3 ){    ← assignment operator, not relational
-        Invalid:  if( x == 3 )    ← missing opening brace
-        Invalid:  if( == x 3 ){   ← wrong order
         """
-
-        # minimum:  if  (  x  ==  3  )  {  → 7 tokens
         if len(tokens) < 7:
             return self._invalid(
                 "If statement",
@@ -446,11 +442,10 @@ class Parser:
                 line_number
             )
 
-        # using = instead of == is a very common mistake — give a specific message
         if operator.type == Types.OP_ASSIGN:
             return self._invalid(
                 "If statement",
-                f'Expected a relational operator (==, !=, >, <) but found "=" — did you mean "=="?',
+                'Expected a relational operator (==, !=, >, <) but found "=" — did you mean "=="?',
                 line_number
             )
 
@@ -461,7 +456,6 @@ class Parser:
                 line_number
             )
 
-        # the value can be a number, string, boolean literal, or another identifier
         valid_value_types = {Types.NUMBER, Types.STRING_LIT, Types.BOOL_LIT, Types.IDENTIFIER}
         if value.type not in valid_value_types:
             return self._invalid(
@@ -480,13 +474,201 @@ class Parser:
         if open_brace.type != Types.OPEN_BRACE:
             return self._invalid(
                 "If statement",
-                f'Expected "{{" to open the if body but found "{open_brace.value}".',
+                'Expected "{" to open the if body.',
                 line_number
             )
 
         return self._valid(
             "If statement",
             f'if( {identifier.value} {operator.value} {value.value} ){{',
+            line_number
+        )
+
+    # -------------------------------------------------------------------------
+    # Pattern 7 — switch statement
+    # switch( variable ){
+    # -------------------------------------------------------------------------
+
+    def _parse_switch_statement(self, tokens, line_number: int) -> ParseResult:
+        """
+        Expected structure:  switch ( <identifier> ) {
+
+        Valid:    switch( x ){
+        Invalid:  switch( x )     ← missing {
+        Invalid:  switch( ){      ← missing variable
+        """
+
+        # minimum:  switch  (  x  )  {  → 5 tokens
+        if len(tokens) < 5:
+            return self._invalid(
+                "Switch statement",
+                "Incomplete — expected: switch( <var> ){",
+                line_number
+            )
+
+        open_paren  = tokens[1]
+        identifier  = tokens[2]
+        close_paren = tokens[3]
+        open_brace  = tokens[4]
+
+        if open_paren.type != Types.OPEN_PAREN:
+            return self._invalid(
+                "Switch statement",
+                f'Expected "(" after "switch" but found "{open_paren.value}".',
+                line_number
+            )
+
+        if identifier.type != Types.IDENTIFIER:
+            return self._invalid(
+                "Switch statement",
+                f'Expected a variable inside switch() but found "{identifier.value}".',
+                line_number
+            )
+
+        if close_paren.type != Types.CLOSE_PAREN:
+            return self._invalid(
+                "Switch statement",
+                f'Expected ")" but found "{close_paren.value}".',
+                line_number
+            )
+
+        if open_brace.type != Types.OPEN_BRACE:
+            return self._invalid(
+                "Switch statement",
+                'Expected "{" to open the switch body.',
+                line_number
+            )
+
+        return self._valid(
+            "Switch statement",
+            f'switch( {identifier.value} ){{',
+            line_number
+        )
+
+    # -------------------------------------------------------------------------
+    # Pattern 8 — case statement
+    # case 1: instruction; break;
+    # -------------------------------------------------------------------------
+
+    def _parse_case_statement(self, tokens, line_number: int) -> ParseResult:
+        """
+        Expected structure:  case <value> : <instruction> ; break ;
+
+        Valid:    case 1: x = 1; break;
+        Invalid:  case 1: x = 1;        ← missing break
+        Invalid:  case x = 1; break;    ← missing colon after value
+        """
+
+        # minimum:  case  1  :  x  =  1  ;  break  ;  → 9 tokens
+        if len(tokens) < 9:
+            return self._invalid(
+                "Case statement",
+                "Incomplete — expected: case <value>: <instruction>; break;",
+                line_number
+            )
+
+        value      = tokens[1]
+        colon      = tokens[2]
+        # tokens[3...-3] are the instruction
+        break_kw   = tokens[-2]
+        semicolon  = tokens[-1]
+
+        if value.type not in {Types.NUMBER, Types.STRING_LIT, Types.BOOL_LIT, Types.IDENTIFIER}:
+            return self._invalid(
+                "Case statement",
+                f'Expected a value after "case" but found "{value.value}".',
+                line_number
+            )
+
+        if colon.type != Types.OP_COLON:
+            return self._invalid(
+                "Case statement",
+                f'Expected ":" after case value but found "{colon.value}".',
+                line_number
+            )
+
+        if break_kw.type != Types.KEYWORD_BREAK:
+            return self._invalid(
+                "Case statement",
+                'Missing "break" at the end of case.',
+                line_number
+            )
+
+        if semicolon.type != Types.SEMICOLON:
+            return self._invalid(
+                "Case statement",
+                'Missing ";" after break.',
+                line_number
+            )
+
+        return self._valid(
+            "Case statement",
+            f'case {value.value}: ... break;',
+            line_number
+        )
+
+    # -------------------------------------------------------------------------
+    # Pattern 9 — default statement
+    # default: instruction;
+    # -------------------------------------------------------------------------
+
+    def _parse_default_statement(self, tokens, line_number: int) -> ParseResult:
+        """
+        Expected structure:  default : <instruction> ;
+        The default case does not require a break.
+        """
+
+        # minimum:  default  :  x  =  1  ;  → 6 tokens
+        if len(tokens) < 4:
+            return self._invalid(
+                "Default statement",
+                "Incomplete — expected: default: <instruction>;",
+                line_number
+            )
+
+        colon     = tokens[1]
+        semicolon = tokens[-1]
+
+        if colon.type != Types.OP_COLON:
+            return self._invalid(
+                "Default statement",
+                f'Expected ":" after "default" but found "{colon.value}".',
+                line_number
+            )
+
+        if semicolon.type != Types.SEMICOLON:
+            return self._invalid(
+                "Default statement",
+                'Missing ";" at the end of default.',
+                line_number
+            )
+
+        return self._valid(
+            "Default statement",
+            'default: ...;',
+            line_number
+        )
+
+    # -------------------------------------------------------------------------
+    # Pattern 10 — break statement
+    # break;
+    # -------------------------------------------------------------------------
+
+    def _parse_break_statement(self, tokens, line_number: int) -> ParseResult:
+        """
+        Expected structure:  break ;
+        A standalone break is valid inside switch and loop bodies.
+        """
+        if len(tokens) < 2 or tokens[-1].type != Types.SEMICOLON:
+            return self._invalid(
+                "Break statement",
+                'Expected ";" after break.',
+                line_number
+            )
+
+        return self._valid(
+            "Break statement",
+            "break;",
             line_number
         )
 

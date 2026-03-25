@@ -69,6 +69,10 @@ class Types:
     KEYWORD_WHILE    = TokenType("KEYWORD_WHILE",    "Keyword")
     KEYWORD_FOR      = TokenType("KEYWORD_FOR",      "Keyword")
     KEYWORD_VOID     = TokenType("KEYWORD_VOID",     "Keyword")
+    KEYWORD_SWITCH   = TokenType("KEYWORD_SWITCH",   "Keyword")
+    KEYWORD_CASE     = TokenType("KEYWORD_CASE",     "Keyword")
+    KEYWORD_BREAK    = TokenType("KEYWORD_BREAK",    "Keyword")
+    KEYWORD_DEFAULT  = TokenType("KEYWORD_DEFAULT",  "Keyword")
 
     # ── Data types ────────────────────────────────────────────────────────────
     # Kept separate from keywords so the semantic analyzer can check
@@ -120,6 +124,10 @@ RESERVED_WORDS: dict[str, TokenType] = {
     "while":    Types.KEYWORD_WHILE,
     "for":      Types.KEYWORD_FOR,
     "void":     Types.KEYWORD_VOID,
+    "switch":   Types.KEYWORD_SWITCH,
+    "case":     Types.KEYWORD_CASE,
+    "break":    Types.KEYWORD_BREAK,
+    "default":  Types.KEYWORD_DEFAULT,
     "true":     Types.BOOL_LIT,
     "false":    Types.BOOL_LIT,
     "number":   Types.TYPE_NUMBER,
