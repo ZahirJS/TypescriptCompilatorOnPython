@@ -91,6 +91,7 @@ class Types:
     OP_MOD     = TokenType("OP_MOD",     "Operator")  # %
     OP_EQUAL   = TokenType("OP_EQUAL",   "Operator")  # ==
     OP_NOT_EQ  = TokenType("OP_NOT_EQ",  "Operator")  # !=
+    OP_INCREMENT = TokenType("OP_INCREMENT", "Operator")  # ++
     OP_GREATER = TokenType("OP_GREATER", "Operator")  # >
     OP_LESS    = TokenType("OP_LESS",    "Operator")  # <
     OP_COLON   = TokenType("OP_COLON",   "Operator")  # : used in type annotations

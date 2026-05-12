@@ -86,6 +86,9 @@ class Parser:
         if first.type == Types.KEYWORD_IF:
             return self._parse_if_statement(tokens, line_number)
 
+        if first.type == Types.KEYWORD_FOR:
+            return self._parse_for_statement(tokens, line_number)
+
         if first.type == Types.KEYWORD_SWITCH:
             return self._parse_switch_statement(tokens, line_number)
 
@@ -481,6 +484,171 @@ class Parser:
         return self._valid(
             "If statement",
             f'if( {identifier.value} {operator.value} {value.value} ){{',
+            line_number
+        )
+
+    # -------------------------------------------------------------------------
+    # Pattern 7 — for statement
+    # for( let i: number = 0; i < 10; i++ ){
+    # -------------------------------------------------------------------------
+
+    def _parse_for_statement(self, tokens, line_number: int) -> ParseResult:
+        """
+        Expected structure:
+            for ( let <id> : <type> = <value> ; <id> <rel_op> <value> ; <id> ++ ) {
+        """
+        if len(tokens) < 14:
+            return self._invalid(
+                "For statement",
+                "Incomplete — expected: for( let <id>: <type> = <value>; <id> <op> <value>; <id>++ ){",
+                line_number
+            )
+
+        if tokens[1].type != Types.OPEN_PAREN:
+            return self._invalid(
+                "For statement",
+                f'Expected "(" after "for" but found "{tokens[1].value}".',
+                line_number
+            )
+
+        if tokens[-1].type != Types.OPEN_BRACE:
+            return self._invalid(
+                "For statement",
+                'Expected "{" to open the for body.',
+                line_number
+            )
+
+        if tokens[-2].type != Types.CLOSE_PAREN:
+            return self._invalid(
+                "For statement",
+                f'Expected ")" before "{{" but found "{tokens[-2].value}".',
+                line_number
+            )
+
+        semicolons = [i for i, t in enumerate(tokens) if t.type == Types.SEMICOLON]
+        if len(semicolons) != 2:
+            return self._invalid(
+                "For statement",
+                'Expected exactly two ";" separators inside for(...).',
+                line_number
+            )
+
+        first_semicolon, second_semicolon = semicolons
+        if first_semicolon <= 2 or second_semicolon <= first_semicolon + 1:
+            return self._invalid(
+                "For statement",
+                "Invalid order of for conditions.",
+                line_number
+            )
+
+        init_tokens = tokens[2:first_semicolon]
+        cond_tokens = tokens[first_semicolon + 1:second_semicolon]
+        step_tokens = tokens[second_semicolon + 1:-2]
+
+        if len(init_tokens) != 6:
+            return self._invalid(
+                "For statement",
+                'Condition 1 must be: let <id>: <type> = <value>.',
+                line_number
+            )
+
+        init_keyword, init_id, init_colon, init_type, init_assign, init_value = init_tokens
+        if init_keyword.type != Types.KEYWORD_LET:
+            return self._invalid(
+                "For statement",
+                'Condition 1 must start with "let".',
+                line_number
+            )
+
+        if init_id.type != Types.IDENTIFIER:
+            return self._invalid(
+                "For statement",
+                f'Expected an identifier in condition 1 but found "{init_id.value}".',
+                line_number
+            )
+
+        if init_colon.type != Types.OP_COLON:
+            return self._invalid(
+                "For statement",
+                f'Expected ":" after "{init_id.value}" in condition 1.',
+                line_number
+            )
+
+        if init_type.type not in VALID_DATA_TYPES:
+            return self._invalid(
+                "For statement",
+                f'Expected a valid data type in condition 1 but found "{init_type.value}".',
+                line_number
+            )
+
+        if init_assign.type != Types.OP_ASSIGN:
+            return self._invalid(
+                "For statement",
+                f'Expected "=" in condition 1 but found "{init_assign.value}".',
+                line_number
+            )
+
+        if init_value.type not in {Types.NUMBER, Types.STRING_LIT, Types.BOOL_LIT, Types.IDENTIFIER}:
+            return self._invalid(
+                "For statement",
+                f'Expected a value in condition 1 but found "{init_value.value}".',
+                line_number
+            )
+
+        if len(cond_tokens) != 3:
+            return self._invalid(
+                "For statement",
+                "Condition 2 must be: <id> <relational_op> <value>.",
+                line_number
+            )
+
+        cond_left, cond_op, cond_right = cond_tokens
+        if cond_left.type != Types.IDENTIFIER:
+            return self._invalid(
+                "For statement",
+                f'Expected a variable in condition 2 but found "{cond_left.value}".',
+                line_number
+            )
+
+        if cond_op.type == Types.OP_ASSIGN or cond_op.type not in self.RELATIONAL_OPS:
+            return self._invalid(
+                "For statement",
+                f'Expected relational operator in condition 2 but found "{cond_op.value}".',
+                line_number
+            )
+
+        if cond_right.type not in {Types.NUMBER, Types.STRING_LIT, Types.BOOL_LIT, Types.IDENTIFIER}:
+            return self._invalid(
+                "For statement",
+                f'Expected a comparable value in condition 2 but found "{cond_right.value}".',
+                line_number
+            )
+
+        if len(step_tokens) != 2:
+            return self._invalid(
+                "For statement",
+                "Condition 3 must be: <id>++.",
+                line_number
+            )
+
+        step_id, step_op = step_tokens
+        if step_id.type != Types.IDENTIFIER:
+            return self._invalid(
+                "For statement",
+                f'Expected an identifier in condition 3 but found "{step_id.value}".',
+                line_number
+            )
+
+        if step_op.type != Types.OP_INCREMENT:
+            return self._invalid(
+                "For statement",
+                f'Expected "++" in condition 3 but found "{step_op.value}".',
+                line_number
+            )
+
+        return self._valid(
+            "For statement",
+            f'for( let {init_id.value}: {init_type.value} = {init_value.value}; {cond_left.value} {cond_op.value} {cond_right.value}; {step_id.value}++ ){{',
             line_number
         )
 

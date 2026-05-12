@@ -113,6 +113,10 @@ class Lexer:
         self._advance()
 
         # check for two-character operators before falling back to single-char
+        if current == "+" and not self._is_at_end() and self._current_char() == "+":
+            self._advance()
+            return Token(Types.OP_INCREMENT, "++", self.line)
+
         if current == "=" and not self._is_at_end() and self._current_char() == "=":
             self._advance()
             return Token(Types.OP_EQUAL, "==", self.line)

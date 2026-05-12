@@ -131,6 +131,9 @@ class SemanticAnalyzer:
         if first.type == Types.KEYWORD_SWITCH:
             return self._validate_switch_statement(tokens, line_number)
 
+        if first.type == Types.KEYWORD_FOR:
+            return self._validate_for_statement(tokens, line_number)
+
         if first.type in (Types.KEYWORD_CASE, Types.KEYWORD_DEFAULT, Types.KEYWORD_BREAK):
             return None  # structure only — parser handles these
 
@@ -302,6 +305,115 @@ class SemanticAnalyzer:
                 f'"{identifier.value}" used in switch was never declared.',
                 line_number
             )
+
+        return None
+
+    # -------------------------------------------------------------------------
+    # Pattern 7 — for statement (matches parser _parse_for_statement layout)
+    # -------------------------------------------------------------------------
+
+    def _validate_for_statement(self, tokens, line_number: int) -> AnalysisResult | None:
+        """
+        Declares the loop variable from the init clause and checks identifiers
+        in init value, condition, and step against the symbol table.
+        """
+        if len(tokens) < 14:
+            return None
+
+        if tokens[1].type != Types.OPEN_PAREN:
+            return None
+
+        if tokens[-1].type != Types.OPEN_BRACE or tokens[-2].type != Types.CLOSE_PAREN:
+            return None
+
+        semicolons = [i for i, t in enumerate(tokens) if t.type == Types.SEMICOLON]
+        if len(semicolons) != 2:
+            return None
+
+        first_semicolon, second_semicolon = semicolons
+        if first_semicolon <= 2 or second_semicolon <= first_semicolon + 1:
+            return None
+
+        init_tokens = tokens[2:first_semicolon]
+        cond_tokens = tokens[first_semicolon + 1 : second_semicolon]
+        step_tokens = tokens[second_semicolon + 1 : -2]
+
+        if len(init_tokens) != 6 or len(cond_tokens) != 3 or len(step_tokens) != 2:
+            return None
+
+        (
+            init_keyword,
+            init_id,
+            init_colon,
+            init_type,
+            init_assign,
+            init_value,
+        ) = init_tokens
+
+        if init_keyword.type != Types.KEYWORD_LET:
+            return None
+
+        if init_id.type != Types.IDENTIFIER or init_colon.type != Types.OP_COLON:
+            return None
+
+        if init_assign.type != Types.OP_ASSIGN:
+            return None
+
+        step_id, step_op = step_tokens
+        if step_id.type != Types.IDENTIFIER or step_op.type != Types.OP_INCREMENT:
+            return None
+
+        if init_type.type not in VALID_DATA_TYPES:
+            return self._invalid(
+                f'"{init_type.value}" is not a valid data type. '
+                f'Valid types are: number, string, boolean.',
+                line_number,
+            )
+
+        name = init_id.value
+        type_name = init_type.value
+
+        existing = self.symbol_table.lookup(name)
+        if existing:
+            if existing["type"] != type_name:
+                return self._ambiguous(
+                    f'"{name}" was already declared as {existing["type"]} on line {existing["line"]}. '
+                    f'Now declared as {type_name} in for-loop.',
+                    line_number,
+                )
+            return self._invalid(
+                f'"{name}" was already declared on line {existing["line"]}.',
+                line_number,
+            )
+
+        warnings: list[str] = []
+
+        if init_value.type == Types.IDENTIFIER and not self.symbol_table.exists(
+            init_value.value
+        ):
+            warnings.append(
+                f'"{init_value.value}" in for init was never declared.'
+            )
+
+        self.symbol_table.declare(name, type_name, line_number)
+
+        cond_left, _cond_op, cond_right = cond_tokens
+        for label, tok in (
+            ("condition (left)", cond_left),
+            ("condition (right)", cond_right),
+        ):
+            if tok.type == Types.IDENTIFIER and not self.symbol_table.exists(tok.value):
+                warnings.append(
+                    f'"{tok.value}" used in for {label} was never declared.'
+                )
+
+        if not self.symbol_table.exists(step_id.value):
+            warnings.append(
+                f'"{step_id.value}" used in for step was never declared.'
+            )
+
+        if warnings:
+            return self._warning("; ".join(warnings), line_number)
 
         return None
 
