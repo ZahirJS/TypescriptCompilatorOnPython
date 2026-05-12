@@ -18,10 +18,14 @@ from compiler.virtual_machine  import VirtualMachine
 # File helpers
 # =============================================================================
 
+_current_file = None   # tracks the last opened/saved path for quick-save
+
 def open_file():
+    global _current_file
     path = filedialog.askopenfilename(
         filetypes=[("TypeScript", "*.ts"), ("Text", "*.txt"), ("All", "*.*")])
     if path:
+        _current_file = path
         with open(path, "r", encoding="utf-8") as f:
             content = f.read()
         editor.delete("1.0", "end")
@@ -29,12 +33,137 @@ def open_file():
         _update_line_numbers()
 
 def save_file():
+    """Quick save — overwrites current file; falls back to Save As."""
+    global _current_file
+    if _current_file:
+        with open(_current_file, "w", encoding="utf-8") as f:
+            f.write(editor.get("1.0", "end-1c"))
+    else:
+        save_file_as()
+
+def save_file_as():
+    global _current_file
     path = filedialog.asksaveasfilename(
         defaultextension=".ts",
         filetypes=[("TypeScript", "*.ts"), ("Text", "*.txt"), ("All", "*.*")])
     if path:
+        _current_file = path
         with open(path, "w", encoding="utf-8") as f:
             f.write(editor.get("1.0", "end-1c"))
+
+
+# =============================================================================
+# Find & Replace
+# =============================================================================
+
+_find_win     = None
+_replace_win  = None
+
+def show_find():
+    global _find_win
+    if _find_win and _find_win.winfo_exists():
+        _find_win.lift(); _find_win.focus(); return
+
+    win = tk.Toplevel(root)
+    win.title("Find")
+    win.geometry("360x80")
+    win.configure(bg="#2b2b2b")
+    win.resizable(False, False)
+    _find_win = win
+
+    tk.Label(win, text="Find:", bg="#2b2b2b", fg="#d4d4d4",
+             font=("Consolas", 10)).grid(row=0, column=0, padx=(10,4), pady=14, sticky="w")
+
+    entry = tk.Entry(win, font=("Consolas", 11), bg="#3c3c3c", fg="white",
+                     insertbackground="white", relief="flat", width=26)
+    entry.grid(row=0, column=1, padx=4, pady=14)
+    entry.focus()
+
+    count_lbl = tk.Label(win, text="", bg="#2b2b2b", fg="#9cdcfe",
+                         font=("Consolas", 9))
+    count_lbl.grid(row=1, column=1, sticky="w", padx=4)
+
+    def do_find(*_):
+        term = entry.get()
+        editor.tag_remove("find_hl", "1.0", "end")
+        if not term:
+            count_lbl.config(text=""); return
+        count = 0; start = "1.0"
+        while True:
+            pos = editor.search(term, start, stopindex="end")
+            if not pos: break
+            end = f"{pos}+{len(term)}c"
+            editor.tag_add("find_hl", pos, end)
+            start = end; count += 1
+        count_lbl.config(text=f"{count} match(es)" if count else "Not found")
+        if count:
+            first = editor.search(term, "1.0", stopindex="end")
+            if first: editor.see(first)
+
+    def on_close():
+        editor.tag_remove("find_hl", "1.0", "end")
+        win.destroy()
+
+    entry.bind("<KeyRelease>", do_find)
+    entry.bind("<Return>",     do_find)
+    win.protocol("WM_DELETE_WINDOW", on_close)
+
+    tk.Button(win, text="Find", command=do_find, bg="#3c3c3c", fg="white",
+              font=("Consolas", 9, "bold"), relief="flat", padx=8, cursor="hand2"
+              ).grid(row=0, column=2, padx=(4,10), pady=14)
+
+
+def show_replace():
+    global _replace_win
+    if _replace_win and _replace_win.winfo_exists():
+        _replace_win.lift(); _replace_win.focus(); return
+
+    win = tk.Toplevel(root)
+    win.title("Find & Replace")
+    win.geometry("400x120")
+    win.configure(bg="#2b2b2b")
+    win.resizable(False, False)
+    _replace_win = win
+
+    for row, label in enumerate(("Find:", "Replace:")):
+        tk.Label(win, text=label, bg="#2b2b2b", fg="#d4d4d4",
+                 font=("Consolas", 10)).grid(row=row, column=0, padx=(10,4),
+                                             pady=(12,4), sticky="w")
+
+    find_e    = tk.Entry(win, font=("Consolas", 11), bg="#3c3c3c", fg="white",
+                         insertbackground="white", relief="flat", width=24)
+    replace_e = tk.Entry(win, font=("Consolas", 11), bg="#3c3c3c", fg="white",
+                         insertbackground="white", relief="flat", width=24)
+    find_e.grid(row=0, column=1, padx=4, pady=(12,4))
+    replace_e.grid(row=1, column=1, padx=4, pady=(4,4))
+    find_e.focus()
+
+    count_lbl = tk.Label(win, text="", bg="#2b2b2b", fg="#9cdcfe",
+                         font=("Consolas", 9))
+    count_lbl.grid(row=2, column=1, sticky="w", padx=4)
+
+    def replace_all():
+        term = find_e.get(); repl = replace_e.get()
+        editor.tag_remove("find_hl", "1.0", "end")
+        if not term:
+            count_lbl.config(text=""); return
+        content = editor.get("1.0", "end-1c")
+        count   = content.count(term)
+        if count:
+            editor.delete("1.0", "end")
+            editor.insert("1.0", content.replace(term, repl))
+            _update_line_numbers()
+            count_lbl.config(text=f"{count} replacement(s) made")
+        else:
+            count_lbl.config(text="Not found")
+
+    btn_frame = tk.Frame(win, bg="#2b2b2b")
+    btn_frame.grid(row=0, column=2, rowspan=2, padx=(4,10), pady=8)
+    tk.Button(btn_frame, text="Replace All", command=replace_all,
+              bg="#3c3c3c", fg="white", font=("Consolas", 9, "bold"),
+              relief="flat", padx=8, cursor="hand2").pack(pady=2)
+
+    win.protocol("WM_DELETE_WINDOW", win.destroy)
 
 
 # =============================================================================
@@ -292,10 +421,16 @@ root.config(menu=menu_bar)
 
 file_menu = Menu(menu_bar, tearoff=0)
 menu_bar.add_cascade(label="File", menu=file_menu)
-file_menu.add_command(label="Open",  command=open_file)
-file_menu.add_command(label="Save",  command=save_file)
+file_menu.add_command(label="Open         Ctrl+O", command=open_file)
+file_menu.add_command(label="Save         Ctrl+S", command=save_file)
+file_menu.add_command(label="Save As...",          command=save_file_as)
 file_menu.add_separator()
-file_menu.add_command(label="Exit",  command=root.quit)
+file_menu.add_command(label="Exit",                command=root.quit)
+
+edit_menu = Menu(menu_bar, tearoff=0)
+menu_bar.add_cascade(label="Edit", menu=edit_menu)
+edit_menu.add_command(label="Find          Ctrl+F", command=show_find)
+edit_menu.add_command(label="Replace       Ctrl+H", command=show_replace)
 
 run_menu = Menu(menu_bar, tearoff=0)
 menu_bar.add_cascade(label="Run", menu=run_menu)
@@ -325,6 +460,7 @@ editor = Text(
     font=("Consolas", 12), borderwidth=0, highlightthickness=0, undo=True)
 editor.pack(side="left", fill="both", expand=True)
 editor.bind("<KeyRelease>", _update_line_numbers)
+editor.tag_configure("find_hl", background="#ffcc00", foreground="#000000")
 
 # ── Toolbar ───────────────────────────────────────────────────────────────────
 toolbar = Frame(root, bg="#2b2b2b")
@@ -365,6 +501,10 @@ output.pack(fill="both", expand=True, padx=8, pady=(2, 8))
 
 # ── Keyboard shortcuts ────────────────────────────────────────────────────────
 root.bind("<Control-b>", lambda e: run_compile())
+root.bind("<Control-s>", lambda e: save_file())
+root.bind("<Control-o>", lambda e: open_file())
+root.bind("<Control-f>", lambda e: show_find())
+root.bind("<Control-h>", lambda e: show_replace())
 root.bind("<Control-1>", lambda e: run_lexer())
 root.bind("<Control-2>", lambda e: run_parser_lines())
 root.bind("<Control-3>", lambda e: run_ast())
