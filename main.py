@@ -161,7 +161,7 @@ def run_symbol_table():
 
 def run_codegen():
     pr = parse_program_source(_get_source())
-    lines = ["── Código Intermedio (Stack Machine) ────────────────", ""]
+    lines = ["── Código Intermedio ────────────────────────────────", ""]
     if pr.errors:
         lines += ["  Corrige errores de sintaxis primero:"] + [f"  {e}" for e in pr.errors]
         _show(lines); return
@@ -211,29 +211,47 @@ def run_vm():
 
 
 # =============================================================================
-# Compile (run all phases, show any errors)
+# Compile — parse, analyze, run, show output or errors
 # =============================================================================
 
 def run_compile():
-    pr      = parse_program_source(_get_source())
-    struct  = _parse_errors_to_tuples(pr.errors)
-    semantic = []
-    if not pr.errors:
-        res      = SemanticAnalyzerAST().analyze(pr.program)
-        semantic = [(r.line, r.severity, r.message) for r in res]
+    pr = parse_program_source(_get_source())
 
-    all_results = sorted(struct + semantic, key=lambda r: r[0])
-    if not all_results:
-        _show(["✓ Compilación exitosa — sin errores ni advertencias."])
+    if pr.errors:
+        errs = _parse_errors_to_tuples(pr.errors)
+        lines = []
+        for ln, sev, msg in errs:
+            lines.append(f"  main.ts:{ln} - {sev}:  {msg}")
+        lines += ["", f"  {len(errs)} error(es) de sintaxis — compilación detenida."]
+        _show(lines)
         return
 
-    lines = ["── Compilar ─────────────────────────────────────────", ""]
-    for ln, sev, msg in all_results:
-        lines.append(f"  main.ts:{ln} - {sev}:  {msg}")
-    errs  = [r for r in all_results if r[1] == "error"]
-    warns = [r for r in all_results if r[1] == "warning"]
-    lines += ["", f"  {len(errs)} error(es), {len(warns)} advertencia(s)."]
-    _show(lines)
+    sem_results = SemanticAnalyzerAST().analyze(pr.program)
+    sem_errors  = [r for r in sem_results if r.severity == "error"]
+    sem_warns   = [r for r in sem_results if r.severity == "warning"]
+
+    if sem_errors:
+        lines = []
+        for r in sorted(sem_errors + sem_warns, key=lambda r: r.line):
+            lines.append(f"  main.ts:{r.line} - {r.severity}:  {r.message}")
+        lines += ["", f"  {len(sem_errors)} error(es), {len(sem_warns)} advertencia(s) — compilación detenida."]
+        _show(lines)
+        return
+
+    # Warnings only (no blocking errors) — prepend them, then run
+    prefix = []
+    if sem_warns:
+        for r in sem_warns:
+            prefix.append(f"  main.ts:{r.line} - warning:  {r.message}")
+        prefix.append("")
+
+    try:
+        asm    = CodeGenerator().generate(pr.program)
+        result = VirtualMachine(asm).run()
+        out    = [l for l in result.split("\n") if not l.startswith(">>>") and l.strip()]
+        _show(prefix + (out if out else ["  (sin salida)"]))
+    except Exception as exc:
+        _show(prefix + [f"  Error: {exc}"])
 
 
 def clear_output():
@@ -281,16 +299,15 @@ file_menu.add_command(label="Exit",  command=root.quit)
 
 run_menu = Menu(menu_bar, tearoff=0)
 menu_bar.add_cascade(label="Run", menu=run_menu)
-run_menu.add_command(label="1. Lexer              Ctrl+1", command=run_lexer)
-run_menu.add_command(label="2. Parser (lineas)    Ctrl+2", command=run_parser_lines)
-run_menu.add_command(label="3. AST                Ctrl+3", command=run_ast)
-run_menu.add_command(label="4. Semántico          Ctrl+4", command=run_semantic)
-run_menu.add_command(label="   Tabla de Simbolos  Ctrl+T", command=run_symbol_table)
+run_menu.add_command(label="▶ Compilar            Ctrl+B", command=run_compile)
 run_menu.add_separator()
-run_menu.add_command(label="5. Código Intermedio  Ctrl+5", command=run_codegen)
-run_menu.add_command(label="6. Ejecutar VM        Ctrl+6", command=run_vm)
+run_menu.add_command(label="Análisis Léxico       Ctrl+1", command=run_lexer)
+run_menu.add_command(label="Análisis Sintáctico   Ctrl+2", command=run_parser_lines)
+run_menu.add_command(label="Árbol Sintáctico (AST) Ctrl+3", command=run_ast)
+run_menu.add_command(label="Análisis Semántico    Ctrl+4", command=run_semantic)
+run_menu.add_command(label="Tabla de Símbolos     Ctrl+T", command=run_symbol_table)
+run_menu.add_command(label="Código Intermedio     Ctrl+5", command=run_codegen)
 run_menu.add_separator()
-run_menu.add_command(label="Compilar (todo)       Ctrl+B", command=run_compile)
 run_menu.add_command(label="Limpiar salida",               command=clear_output)
 
 # ── Editor area ───────────────────────────────────────────────────────────────
@@ -313,24 +330,25 @@ editor.bind("<KeyRelease>", _update_line_numbers)
 toolbar = Frame(root, bg="#2b2b2b")
 toolbar.pack(fill="x", padx=6, pady=(4, 0))
 
-BTN_ACTIVE = "#0e639c"
 BTN_NORMAL = "#3c3c3c"
-BTN_RUN    = "#2d7a2d"
+BTN_RUN    = "#1e6b1e"
 
 def _btn(parent, label, cmd, color=BTN_NORMAL):
     return tk.Button(parent, text=label, command=cmd,
                      bg=color, fg="white", font=("Consolas", 10, "bold"),
                      relief="flat", padx=10, pady=4, cursor="hand2")
 
-_btn(toolbar, "1 Lexer",        run_lexer).pack(side="left", padx=(0,2))
-_btn(toolbar, "2 Parser",       run_parser_lines).pack(side="left", padx=2)
-_btn(toolbar, "3 AST",          run_ast).pack(side="left", padx=2)
-_btn(toolbar, "4 Semántico",    run_semantic).pack(side="left", padx=2)
-_btn(toolbar, "Símbolos",       run_symbol_table).pack(side="left", padx=2)
-_btn(toolbar, "5 Código",       run_codegen, BTN_ACTIVE).pack(side="left", padx=2)
-_btn(toolbar, "6 ▶ Ejecutar",   run_vm, BTN_RUN).pack(side="left", padx=2)
-_btn(toolbar, "Compilar todo",  run_compile, BTN_ACTIVE).pack(side="left", padx=(8,2))
-_btn(toolbar, "✕ Limpiar",      clear_output).pack(side="left", padx=2)
+# LEFT: main compile action
+_btn(toolbar, "▶  Compilar", run_compile, BTN_RUN).pack(side="left", padx=(0, 14))
+
+# RIGHT: phase inspection buttons (packed right-to-left to render left-to-right)
+_btn(toolbar, "✕ Limpiar",        clear_output).pack(side="right", padx=(2, 0))
+_btn(toolbar, "Cód. Intermedio",  run_codegen).pack(side="right", padx=2)
+_btn(toolbar, "Símbolos",         run_symbol_table).pack(side="right", padx=2)
+_btn(toolbar, "Semántico",        run_semantic).pack(side="right", padx=2)
+_btn(toolbar, "AST",              run_ast).pack(side="right", padx=2)
+_btn(toolbar, "Parser",           run_parser_lines).pack(side="right", padx=2)
+_btn(toolbar, "Léxico",           run_lexer).pack(side="right", padx=2)
 
 # ── Output panel ──────────────────────────────────────────────────────────────
 output_frame = Frame(root, bg="#1e1e1e", height=260)
@@ -346,14 +364,13 @@ output = Text(output_frame, bg="#1e1e1e", fg="#ce9178",
 output.pack(fill="both", expand=True, padx=8, pady=(2, 8))
 
 # ── Keyboard shortcuts ────────────────────────────────────────────────────────
+root.bind("<Control-b>", lambda e: run_compile())
 root.bind("<Control-1>", lambda e: run_lexer())
 root.bind("<Control-2>", lambda e: run_parser_lines())
 root.bind("<Control-3>", lambda e: run_ast())
 root.bind("<Control-4>", lambda e: run_semantic())
 root.bind("<Control-t>", lambda e: run_symbol_table())
 root.bind("<Control-5>", lambda e: run_codegen())
-root.bind("<Control-6>", lambda e: run_vm())
-root.bind("<Control-b>", lambda e: run_compile())
 
 # ── Seed the editor with the bubble-sort demo ─────────────────────────────────
 BUBBLE_SORT_DEMO = """\
