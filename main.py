@@ -79,7 +79,7 @@ def run_lexer():
 
 def run_parser_lines():
     results = Parser().parse(_get_source())
-    lines   = ["── Parser (línea por línea) ─────────────────────────", ""]
+    lines   = ["── Parser (line by line) ────────────────────────────", ""]
     for r in results:
         status = "ok   " if r.is_valid else "error"
         lines.append(f"  line {r.line:<4}  [{status}]  {r.pattern:<26}  {r.message}")
@@ -93,14 +93,14 @@ def run_parser_lines():
 def run_ast():
     src    = _get_source().strip()
     result = parse_program_source(src)
-    lines  = ["── AST (programa completo) ──────────────────────────", ""]
+    lines  = ["── AST (full program) ───────────────────────────────", ""]
     if result.errors:
         for e in result.errors:
             lines.append(f"  {e}")
-        lines.append(""); lines.append("  Parse fallido — AST no construido.")
+        lines.append(""); lines.append("  Parse failed — AST not built.")
     else:
         lines.append(result.program.tree().rstrip())
-        lines.append(""); lines.append("  Parse exitoso.")
+        lines.append(""); lines.append("  Parse successful.")
     _show(lines)
 
 
@@ -110,23 +110,23 @@ def run_ast():
 
 def run_semantic():
     pr = parse_program_source(_get_source())
-    lines = ["── Análisis Semántico ───────────────────────────────", ""]
+    lines = ["── Semantic Analysis ────────────────────────────────", ""]
     if pr.errors:
-        lines.append("  Corrige errores de sintaxis primero:")
+        lines.append("  Fix syntax errors first:")
         for e in pr.errors:
             lines.append(f"  {e}")
         _show(lines); return
 
     results = SemanticAnalyzerAST().analyze(pr.program)
     if not results:
-        lines.append("  Sin errores semánticos.")
+        lines.append("  No semantic errors.")
     else:
         for r in results:
             lines.append(f"  main.ts:{r.line} - {r.severity}:  {r.message}")
         errs  = [r for r in results if r.severity == "error"]
         warns = [r for r in results if r.severity == "warning"]
         lines.append("")
-        lines.append(f"  {len(errs)} error(es), {len(warns)} advertencia(s).")
+        lines.append(f"  {len(errs)} error(s), {len(warns)} warning(s).")
     _show(lines)
 
 
@@ -136,18 +136,18 @@ def run_semantic():
 
 def run_symbol_table():
     pr = parse_program_source(_get_source())
-    lines = ["── Tabla de Símbolos ────────────────────────────────", ""]
+    lines = ["── Symbol Table ─────────────────────────────────────", ""]
     if pr.errors:
-        lines.append("  (errores de parse — ejecuta AST primero)")
+        lines.append("  (parse errors — run AST first)")
         _show(lines); return
     analyzer = SemanticAnalyzerAST()
     analyzer.analyze(pr.program)
     flat = analyzer.symbols.all_flat()
     flat.sort(key=lambda r: (r[3], r[2], r[0]))
     if not flat:
-        lines.append("  (ninguna variable declarada)")
+        lines.append("  (no variables declared)")
     else:
-        lines.append(f"  {'Nombre':<20} {'Tipo':<16} {'Línea':<8} Scope")
+        lines.append(f"  {'Name':<20} {'Type':<16} {'Line':<8} Scope")
         lines.append(f"  {'─'*20} {'─'*16} {'─'*8} {'─'*6}")
         for name, typ, ln, depth in flat:
             scope = "global" if depth == 0 else f"local-{depth}"
@@ -161,15 +161,15 @@ def run_symbol_table():
 
 def run_codegen():
     pr = parse_program_source(_get_source())
-    lines = ["── Código Intermedio ────────────────────────────────", ""]
+    lines = ["── Code Generation ──────────────────────────────────", ""]
     if pr.errors:
-        lines += ["  Corrige errores de sintaxis primero:"] + [f"  {e}" for e in pr.errors]
+        lines += ["  Fix syntax errors first:"] + [f"  {e}" for e in pr.errors]
         _show(lines); return
 
     sem_results = SemanticAnalyzerAST().analyze(pr.program)
     sem_errors  = [r for r in sem_results if r.severity == "error"]
     if sem_errors:
-        lines += ["  Corrige errores semánticos primero:"]
+        lines += ["  Fix semantic errors first:"]
         for r in sem_errors:
             lines.append(f"  main.ts:{r.line} - error:  {r.message}")
         _show(lines); return
@@ -178,7 +178,7 @@ def run_codegen():
         asm = CodeGenerator().generate(pr.program)
         lines.append(asm)
     except Exception as exc:
-        lines.append(f"  [!] Error en generación: {exc}")
+        lines.append(f"  [!] Code generation error: {exc}")
     _show(lines)
 
 
@@ -188,15 +188,15 @@ def run_codegen():
 
 def run_vm():
     pr = parse_program_source(_get_source())
-    lines = ["── Ejecución — Máquina Virtual ──────────────────────", ""]
+    lines = ["── Execution ────────────────────────────────────────", ""]
     if pr.errors:
-        lines += ["  Corrige errores de sintaxis primero:"] + [f"  {e}" for e in pr.errors]
+        lines += ["  Fix syntax errors first:"] + [f"  {e}" for e in pr.errors]
         _show(lines); return
 
     sem_results = SemanticAnalyzerAST().analyze(pr.program)
     sem_errors  = [r for r in sem_results if r.severity == "error"]
     if sem_errors:
-        lines += ["  Corrige errores semánticos primero:"]
+        lines += ["  Fix semantic errors first:"]
         for r in sem_errors:
             lines.append(f"  main.ts:{r.line} - error:  {r.message}")
         _show(lines); return
@@ -206,7 +206,7 @@ def run_vm():
         result = VirtualMachine(asm).run()
         lines.append(result)
     except Exception as exc:
-        lines.append(f"  [!] Error en VM: {exc}")
+        lines.append(f"  [!] Runtime error: {exc}")
     _show(lines)
 
 
@@ -222,7 +222,7 @@ def run_compile():
         lines = []
         for ln, sev, msg in errs:
             lines.append(f"  main.ts:{ln} - {sev}:  {msg}")
-        lines += ["", f"  {len(errs)} error(es) de sintaxis — compilación detenida."]
+        lines += ["", f"  {len(errs)} syntax error(s) — compilation stopped."]
         _show(lines)
         return
 
@@ -234,7 +234,7 @@ def run_compile():
         lines = []
         for r in sorted(sem_errors + sem_warns, key=lambda r: r.line):
             lines.append(f"  main.ts:{r.line} - {r.severity}:  {r.message}")
-        lines += ["", f"  {len(sem_errors)} error(es), {len(sem_warns)} advertencia(s) — compilación detenida."]
+        lines += ["", f"  {len(sem_errors)} error(s), {len(sem_warns)} warning(s) — compilation stopped."]
         _show(lines)
         return
 
@@ -249,7 +249,7 @@ def run_compile():
         asm    = CodeGenerator().generate(pr.program)
         result = VirtualMachine(asm).run()
         out    = [l for l in result.split("\n") if not l.startswith(">>>") and l.strip()]
-        _show(prefix + (out if out else ["  (sin salida)"]))
+        _show(prefix + (out if out else ["  (no output)"]))
     except Exception as exc:
         _show(prefix + [f"  Error: {exc}"])
 
@@ -299,16 +299,16 @@ file_menu.add_command(label="Exit",  command=root.quit)
 
 run_menu = Menu(menu_bar, tearoff=0)
 menu_bar.add_cascade(label="Run", menu=run_menu)
-run_menu.add_command(label="▶ Compilar            Ctrl+B", command=run_compile)
+run_menu.add_command(label="▶ Compile             Ctrl+B", command=run_compile)
 run_menu.add_separator()
-run_menu.add_command(label="Análisis Léxico       Ctrl+1", command=run_lexer)
-run_menu.add_command(label="Análisis Sintáctico   Ctrl+2", command=run_parser_lines)
-run_menu.add_command(label="Árbol Sintáctico (AST) Ctrl+3", command=run_ast)
-run_menu.add_command(label="Análisis Semántico    Ctrl+4", command=run_semantic)
-run_menu.add_command(label="Tabla de Símbolos     Ctrl+T", command=run_symbol_table)
-run_menu.add_command(label="Código Intermedio     Ctrl+5", command=run_codegen)
+run_menu.add_command(label="Lexer                 Ctrl+1", command=run_lexer)
+run_menu.add_command(label="Parser                Ctrl+2", command=run_parser_lines)
+run_menu.add_command(label="AST                   Ctrl+3", command=run_ast)
+run_menu.add_command(label="Semantic Analysis     Ctrl+4", command=run_semantic)
+run_menu.add_command(label="Symbol Table          Ctrl+T", command=run_symbol_table)
+run_menu.add_command(label="Code Gen              Ctrl+5", command=run_codegen)
 run_menu.add_separator()
-run_menu.add_command(label="Limpiar salida",               command=clear_output)
+run_menu.add_command(label="Clear Output",                 command=clear_output)
 
 # ── Editor area ───────────────────────────────────────────────────────────────
 editor_frame = Frame(root, bg="#1e1e1e")
@@ -339,16 +339,16 @@ def _btn(parent, label, cmd, color=BTN_NORMAL):
                      relief="flat", padx=10, pady=4, cursor="hand2")
 
 # LEFT: main compile action
-_btn(toolbar, "▶  Compilar", run_compile, BTN_RUN).pack(side="left", padx=(0, 14))
+_btn(toolbar, "▶  Compile", run_compile, BTN_RUN).pack(side="left", padx=(0, 14))
 
 # RIGHT: phase inspection buttons (packed right-to-left to render left-to-right)
-_btn(toolbar, "✕ Limpiar",        clear_output).pack(side="right", padx=(2, 0))
-_btn(toolbar, "Cód. Intermedio",  run_codegen).pack(side="right", padx=2)
-_btn(toolbar, "Símbolos",         run_symbol_table).pack(side="right", padx=2)
-_btn(toolbar, "Semántico",        run_semantic).pack(side="right", padx=2)
-_btn(toolbar, "AST",              run_ast).pack(side="right", padx=2)
-_btn(toolbar, "Parser",           run_parser_lines).pack(side="right", padx=2)
-_btn(toolbar, "Léxico",           run_lexer).pack(side="right", padx=2)
+_btn(toolbar, "✕ Clear",   clear_output).pack(side="right", padx=(2, 0))
+_btn(toolbar, "Code Gen",  run_codegen).pack(side="right", padx=2)
+_btn(toolbar, "Symbols",   run_symbol_table).pack(side="right", padx=2)
+_btn(toolbar, "Semantic",  run_semantic).pack(side="right", padx=2)
+_btn(toolbar, "AST",       run_ast).pack(side="right", padx=2)
+_btn(toolbar, "Parser",    run_parser_lines).pack(side="right", padx=2)
+_btn(toolbar, "Lexer",     run_lexer).pack(side="right", padx=2)
 
 # ── Output panel ──────────────────────────────────────────────────────────────
 output_frame = Frame(root, bg="#1e1e1e", height=260)

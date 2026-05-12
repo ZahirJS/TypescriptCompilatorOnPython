@@ -51,7 +51,7 @@ class VirtualMachine:
     # ── execution ────────────────────────────────────────────────────────────
 
     def run(self) -> str:
-        self.output_lines = [">>> INICIO DE EJECUCION (Maquina Virtual)"]
+        self.output_lines = [">>> EXECUTION START"]
         ip     = 0
         steps  = 0
         mem    = self.memory
@@ -61,8 +61,8 @@ class VirtualMachine:
         while ip < len(self.instructions):
             if steps > self.MAX_STEPS:
                 self.output_lines.append(
-                    f"[!] RUNTIME ERROR: limite de {self.MAX_STEPS} pasos excedido "
-                    f"(posible bucle infinito). Detenido.")
+                    f"[!] RUNTIME ERROR: step limit of {self.MAX_STEPS} exceeded "
+                    f"(possible infinite loop). Stopped.")
                 break
             steps += 1
 
@@ -202,20 +202,20 @@ class VirtualMachine:
                     break
 
                 else:
-                    self.output_lines.append(f"[!] Instruccion desconocida: {op}")
+                    self.output_lines.append(f"[!] Unknown instruction: {op}")
 
             except IndexError:
                 self.output_lines.append(
-                    f"[!] RUNTIME ERROR: stack underflow en IP {ip} ({op})")
+                    f"[!] RUNTIME ERROR: stack underflow at IP {ip} ({op})")
                 break
             except Exception as exc:
                 self.output_lines.append(
-                    f"[!] RUNTIME ERROR en IP {ip} ({op} {arg}): {exc}")
+                    f"[!] RUNTIME ERROR at IP {ip} ({op} {arg}): {exc}")
                 break
 
             ip += 1
 
-        self.output_lines.append(">>> FIN DE EJECUCION")
+        self.output_lines.append(">>> EXECUTION END")
         return "\n".join(self.output_lines)
 
     # ── literal parser ───────────────────────────────────────────────────────
