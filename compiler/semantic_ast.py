@@ -187,7 +187,7 @@ class SemanticAnalyzerAST:
     def _visit_assign(self, node: ast.AssignStmt):
         sym = self.symbols.lookup(node.name)
         if sym is None:
-            self._warn(f'"{node.name}" assigned but never declared', node.line)
+            self._err(f'"{node.name}" assigned but never declared', node.line)
             self._expr_type(node.value)
             return
 
@@ -244,7 +244,7 @@ class SemanticAnalyzerAST:
         if isinstance(node, ast.IdentifierExpr):
             sym = self.symbols.lookup(node.name)
             if sym is None:
-                self._warn(f'"{node.name}" used but never declared', node.line)
+                self._err(f'"{node.name}" used but never declared', node.line)
                 return "unknown"
             return sym["type"]
 
@@ -261,7 +261,7 @@ class SemanticAnalyzerAST:
         if isinstance(node, ast.ArrayAccessExpr):
             sym = self.symbols.lookup(node.name)
             if sym is None:
-                self._warn(f'"{node.name}" used but never declared', node.line)
+                self._err(f'"{node.name}" used but never declared', node.line)
                 return "unknown"
             it = self._expr_type(node.index)
             if it not in ("unknown", "any", "number"):
