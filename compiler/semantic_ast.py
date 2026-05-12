@@ -211,7 +211,7 @@ class SemanticAnalyzerAST:
 
     def _visit_function(self, node: ast.FunctionDecl):
         if not self.symbols.define(
-            node.name, f"function->{node.return_type}", node.line
+            node.name, f"function->{node.return_type}:{len(node.params)}", node.line
         ):
             self._err(f'Function "{node.name}" already declared', node.line)
 
@@ -338,13 +338,22 @@ class SemanticAnalyzerAST:
             self._err(f'Function "{node.callee}" not declared', node.line)
             return "unknown"
 
-        # Validate argument count (loose check — allow mismatch for flexibility)
         for a in node.arguments:
             self._expr_type(a)
 
         ret = sym["type"]
         if ret.startswith("function->"):
-            return ret[len("function->"):]
+            inner = ret[len("function->"):]
+            if ":" in inner:
+                ret_type, n_str = inner.rsplit(":", 1)
+                expected = int(n_str)
+                got = len(node.arguments)
+                if got != expected:
+                    self._err(
+                        f'"{node.callee}" expects {expected} argument(s), got {got}',
+                        node.line)
+                return ret_type
+            return inner
         return ret
 
     # ── helpers ─────────────────────────────────────────────────────────────

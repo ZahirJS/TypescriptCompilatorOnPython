@@ -17,14 +17,36 @@ class VirtualMachine:
 
     def __init__(self, asm_code: str):
         self.raw = asm_code
-        self.memory: dict = {}
+        self.memory: dict = {}        # global variables
+        self.frames: list = []        # one dict per active function call
         self.stack:  list = []
-        self.instructions: list = []   # list of (opcode, *args)
+        self.instructions: list = []
         self.labels: dict = {}
         self.call_stack: list = []
         self.output_lines: list = []
 
         self._load(asm_code)
+
+    # ── variable access with frame support ───────────────────────────────────
+
+    def _read_var(self, name: str):
+        """Read variable: locals (__prefix) from top frame, globals from memory."""
+        if name.startswith("__") and self.frames:
+            return self.frames[-1].get(name, 0)
+        return self.memory.get(name, 0)
+
+    def _write_var(self, name: str, value):
+        """Write variable: locals (__prefix) to top frame, globals to memory."""
+        if name.startswith("__") and self.frames:
+            self.frames[-1][name] = value
+        else:
+            self.memory[name] = value
+
+    def _get_array(self, name: str):
+        """Get array object for index operations (checks both frame and memory)."""
+        if name.startswith("__") and self.frames:
+            return self.frames[-1].get(name)
+        return self.memory.get(name)
 
     # ── loader (first pass) ──────────────────────────────────────────────────
 
@@ -54,7 +76,6 @@ class VirtualMachine:
         self.output_lines = [">>> EXECUTION START"]
         ip     = 0
         steps  = 0
-        mem    = self.memory
         stack  = self.stack
         labels = self.labels
 
@@ -74,17 +95,14 @@ class VirtualMachine:
                     stack.append(self._parse_literal(arg))
 
                 elif op == "PUSH_VAR":
-                    if arg not in mem:
-                        stack.append(0)   # uninitialized → default 0
-                    else:
-                        stack.append(mem[arg])
+                    stack.append(self._read_var(arg))
 
                 elif op == "STORE_VAR":
-                    mem[arg] = stack.pop()
+                    self._write_var(arg, stack.pop())
 
                 elif op == "LOAD_IDX":
                     index = stack.pop()
-                    arr   = mem.get(arg)
+                    arr   = self._get_array(arg)
                     if not isinstance(arr, list):
                         raise RuntimeError(f"'{arg}' is not an array")
                     if index < 0 or index >= len(arr):
@@ -95,7 +113,7 @@ class VirtualMachine:
                 elif op == "STORE_IDX":
                     index = stack.pop()
                     value = stack.pop()
-                    arr   = mem.get(arg)
+                    arr   = self._get_array(arg)
                     if not isinstance(arr, list):
                         raise RuntimeError(f"'{arg}' is not an array")
                     if index < 0 or index >= len(arr):
@@ -181,10 +199,13 @@ class VirtualMachine:
                 # ── function call / return ──────────────────────────────
                 elif op == "CALL":
                     self.call_stack.append(ip + 1)
+                    self.frames.append({})        # new local frame for this call
                     ip = labels[f"func_{arg}"]
                     continue
 
                 elif op == "RET":
+                    if self.frames:
+                        self.frames.pop()         # discard local frame
                     if self.call_stack:
                         ip = self.call_stack.pop()
                         continue

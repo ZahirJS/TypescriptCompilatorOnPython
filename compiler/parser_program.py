@@ -146,6 +146,12 @@ class _ProgramParser:
             return self._parse_block()
         if tok.type == Types.IDENTIFIER:
             return self._parse_identifier_statement()
+        if tok.type in (Types.OP_INCREMENT, Types.OP_DECREMENT):
+            op = self._advance().value
+            name_tok = self._expect_type(Types.IDENTIFIER)
+            self._expect_type(Types.SEMICOLON)
+            expr = ast.UnaryExpr(op, ast.IdentifierExpr(name_tok.value, name_tok.line), tok.line)
+            return ast.ExprStmt(expr, tok.line)
 
         raise ProgramParseError(
             f"unexpected token '{tok.value}' starting statement", tok.line)
